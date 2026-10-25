@@ -205,7 +205,7 @@ class ScottiBYTEIncusPanel extends HTMLElement {
       const items=await this.hass.callWS({type:API+'snapshots',...this.target(target)});
       if(this.snapshotTarget!==target)return;
       $('#snapshot-list').innerHTML=items.length?items.map((item,index)=>`<article class="snapshot-item"><strong>${escapeHTML(item.name)}</strong><small>Created: ${escapeHTML(item.created_at?new Date(item.created_at).toLocaleString():'—')} · Expires: ${escapeHTML(item.expires_at&&!item.expires_at.startsWith('0001-')?new Date(item.expires_at).toLocaleString():'Never')} · ${item.stateful?'Contains saved memory':'No saved memory'}</small><div><button data-snap-action="rename" data-snap-index="${index}">Rename</button><button data-snap-action="restore" data-snap-index="${index}">Restore</button><button data-snap-action="delete" data-snap-index="${index}">Delete</button></div></article>`).join(''):'<p>No snapshots yet.</p>';
-      $('#snapshots-status').textContent=`${items.length} snapshot${items.length===1?'':'s'}. Stop the instance before restoring.`;
+      $('#snapshots-status').textContent=`${items.length} snapshot${items.length===1?'':'s'}.`;
       this.shadowRoot.querySelectorAll('[data-snap-action]').forEach(button=>button.onclick=()=>this.confirmSnapshot(button.dataset.snapAction,items[+button.dataset.snapIndex].name));
     }catch(err){if(this.snapshotTarget===target)$('#snapshots-status').textContent=err.message||String(err);}
   }
@@ -213,7 +213,7 @@ class ScottiBYTEIncusPanel extends HTMLElement {
     if(this.snapshotBusy)return;
     const $=s=>this.shadowRoot.querySelector(s), dialog=$('#snapshot-confirm');
     $('#snapshot-confirm-title').textContent=`${action[0].toUpperCase()+action.slice(1)} snapshot?`;
-    $('#snapshot-confirm-text').textContent=action==='restore'?`Restore ${name} to ${this.snapshotTarget.name} on ${this.snapshotTarget.server}? Current instance disk and configuration will be replaced. The instance must be stopped; it will remain stopped. Saved running memory is not restored.`:action==='delete'?`Permanently delete snapshot ${name} from ${this.snapshotTarget.name} on ${this.snapshotTarget.server}?`:`Rename snapshot ${name}`;
+    $('#snapshot-confirm-text').textContent=action==='restore'?`Restore ${name} to ${this.snapshotTarget.name} on ${this.snapshotTarget.server}? Current instance disk and configuration will be replaced. Incus will restart the instance if it is currently running; a stopped instance will remain stopped. Saved running memory is not restored.`:action==='delete'?`Permanently delete snapshot ${name} from ${this.snapshotTarget.name} on ${this.snapshotTarget.server}?`:`Rename snapshot ${name}`;
     $('#snapshot-rename-label').hidden=action!=='rename';$('#snapshot-rename').value=name;
     dialog.returnValue='';dialog.showModal();
     await new Promise(resolve=>dialog.addEventListener('close',resolve,{once:true}));

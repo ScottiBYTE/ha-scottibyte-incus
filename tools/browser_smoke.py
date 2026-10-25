@@ -124,6 +124,8 @@ def main():
                 assert page.locator(".snapshot-item").count() == 1
                 page.locator('[data-snap-action="restore"]').click()
                 assert "Current instance disk and configuration will be replaced" in page.locator("#snapshot-confirm-text").inner_text()
+                assert "Incus will restart the instance if it is currently running" in page.locator("#snapshot-confirm-text").inner_text()
+                assert "must be stopped" not in page.locator("#snapshots-dialog").inner_text()
                 page.locator('#snapshot-confirm button[value="cancel"]').click()
                 page.locator('[data-snap-action="delete"]').click()
                 page.locator("#snapshot-confirm-submit").click()

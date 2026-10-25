@@ -1,8 +1,8 @@
-# Version 0.1.5 validation
+# Version 0.1.6 validation
 
 ## Completed locally
 
-- **39 Python regression tests pass** using the actual Home Assistant **2026.10.4** runtime on Python **3.14.8**.
+- **40 Python regression tests pass** using the actual Home Assistant **2026.10.4** runtime on Python **3.14.8**.
 - Actual integration loading: configuration-entry setup, sensors, connectivity entity, custom sidebar registration, and entry unloading.
 - Configuration flow: method selection, SSH fingerprint confirmation, completed enrollment, and absence of SSH/sudo secrets in saved entry data. Private client key mode checked.
 - SSH bootstrap against a local AsyncSSH server plus a TLS Incus-protocol simulator, including automatic listener setup and token retrieval.
@@ -32,7 +32,7 @@ Browser verification used Chromium 134 through Playwright 1.51.0. Browser data w
 
 ## Still requires live validation
 
-- Snapshot create/list/rename/delete/restore on disposable container and VM guests, including storage errors and stopping requirements.
+- Snapshot create/list/rename/delete/restore on disposable container and VM guests, including storage errors and automatic restart of running instances.
 - Version 0.1.5 host-normalized CPU readings and preferred guest IP selection.
 - Remote trust revocation on deletion, including an unreachable server and manual cleanup notification.
 - Raspberry Pi/ARM host, cluster-member targeting/migration, guest-agent failures, and different sudo configurations.

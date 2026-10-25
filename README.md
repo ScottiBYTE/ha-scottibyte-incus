@@ -2,7 +2,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 0.1.5 — preparing for v1.0.** Live monitoring, multiple-server enrollment, HACS custom-repository installation, reverse DNS, and drag-and-drop reordering have been exercised on Scott's installation. Additional live acceptance testing is required before declaring a stable release. This repository is not yet in HACS's default catalog.
+**Version 0.1.6 — preparing for v1.0.** Live monitoring, multiple-server enrollment, HACS custom-repository installation, reverse DNS, and drag-and-drop reordering have been exercised on Scott's installation. Additional live acceptance testing is required before declaring a stable release. This repository is not yet in HACS's default catalog.
 
 ## Features
 
@@ -83,7 +83,7 @@ The top row shows combined inventory totals; server cards sit below it. Click a 
 - **Start** is available for stopped instances.
 - **Stop** requests graceful shutdown with a 60-second guest timeout. There is no forced-stop button in version one.
 - **Snapshot** opens a named-snapshot form; leave the name blank for an automatic name. **Manage snapshots** (the compact **Manage** button beside Snapshot) lists existing snapshots, creation/expiry dates, and whether saved memory is present. New snapshots omit running memory and inherit the server's snapshot-expiry policy.
-- Snapshot rename, delete, and restore are available in the manager. Delete and restore require confirmation. Restore requires a live **Stopped** state and restores disk/configuration without saved running memory; the integration never force-stops an instance for restore. Mutations share the instance's lifecycle-operation lock and wait for Incus completion. An operation can continue if the browser disconnects; refresh before retrying after a timeout.
+- Snapshot rename, delete, and restore are available in the manager. Delete and restore require confirmation. Restore accepts running or stopped instances and restores disk/configuration without saved running memory. Incus handles stopping and restarting an instance that is running; a stopped instance remains stopped. The integration does not issue a separate stop/start sequence. Mutations share the instance's lifecycle-operation lock and wait for Incus completion. An operation can continue if the browser disconnects; refresh before retrying after a timeout.
 - Snapshots reside with the instance and do not replace external backups. Attached custom storage volumes are excluded. Applications may require their own quiescing or backup procedures for consistency.
 - **Terminal** is available only for running system containers. It opens a root shell, closes on disconnect/unsubscribe, and sends SIGHUP to the shell on cleanup. Sessions close after 15 minutes without keyboard input or four hours total. There is a limit of two terminals per HA user and ten overall.
 - Action requests recheck live instance state and serialize operations per instance. Success is displayed only after Incus reports the operation completed.

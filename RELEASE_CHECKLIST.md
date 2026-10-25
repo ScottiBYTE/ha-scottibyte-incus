@@ -4,7 +4,7 @@ Version 0.1.5 is a testing build, not a stable-release declaration.
 
 ## Implemented; verify in live HA
 
-- [ ] Snapshot create/list/rename/delete/restore on disposable container and VM; running restore rejected; cancellations change nothing.
+- [ ] Snapshot create/list/rename/delete/restore on disposable container and VM; running restore handled by Incus with automatic restart; cancellations change nothing.
 
 - [ ] CPU % of host matches sampled Incus usage divided by the actual host logical CPU count.
 - [ ] Cluster instances use their member's capacity; a move resets the CPU sample.

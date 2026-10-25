@@ -13,7 +13,7 @@ fi
 python3 - <<'CHECK'
 import json
 from pathlib import Path
-assert json.loads(Path("custom_components/scottibyte_incus/manifest.json").read_text())["version"] == "0.1.5"
+assert json.loads(Path("custom_components/scottibyte_incus/manifest.json").read_text())["version"] == "0.1.6"
 CHECK
 run_id=""
 for attempt in {1..20}; do
@@ -29,15 +29,15 @@ if ! gh run watch "$run_id" --exit-status; then
   gh run view "$run_id" --log-failed
   exit 1
 fi
-if gh release view v0.1.5 >/dev/null 2>&1; then
-  echo "v0.1.5 already exists; leaving it unchanged."
+if gh release view v0.1.6 >/dev/null 2>&1; then
+  echo "v0.1.6 already exists; leaving it unchanged."
   exit 0
 fi
-if gh api repos/ScottiBYTE/ha-scottibyte-incus/git/ref/tags/v0.1.5 >/dev/null 2>&1; then
-  tagged_commit=$(gh api repos/ScottiBYTE/ha-scottibyte-incus/commits/v0.1.5 --jq .sha)
+if gh api repos/ScottiBYTE/ha-scottibyte-incus/git/ref/tags/v0.1.6 >/dev/null 2>&1; then
+  tagged_commit=$(gh api repos/ScottiBYTE/ha-scottibyte-incus/commits/v0.1.6 --jq .sha)
   if [ "$tagged_commit" != "$release_commit" ]; then
-    echo "Existing v0.1.5 tag points to another commit; no release created."
+    echo "Existing v0.1.6 tag points to another commit; no release created."
     exit 1
   fi
 fi
-gh release create v0.1.5 --target "$release_commit" --prerelease   --title "ScottiBYTE Incus v0.1.5 — first prerelease"   --notes-file RELEASE_NOTES_0.1.5.md
+gh release create v0.1.6 --target "$release_commit" --prerelease   --title "ScottiBYTE Incus v0.1.6 — snapshot restore correction"   --notes-file RELEASE_NOTES_0.1.6.md

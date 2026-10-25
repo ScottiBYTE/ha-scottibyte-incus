@@ -145,10 +145,8 @@ async def snapshot_action(hass, connection, msg):
             raise IncusError("An operation is already running for this instance")
         async with lock:
             state = await coordinator.client.state(msg["project"], msg["name"])
-            if msg["action"] == "restore" and state.get("status") != "Stopped":
-                raise IncusError("Stop the instance before restoring a snapshot")
-            if msg["action"] == "create" and state.get("status") not in ("Running", "Stopped"):
-                raise IncusError("Instance must be running or stopped to create a snapshot")
+            if msg["action"] in ("create", "restore") and state.get("status") not in ("Running", "Stopped"):
+                raise IncusError("Instance must be running or stopped for snapshot creation or restore")
             snapshot = msg.get("snapshot", "").strip()
             if msg["action"] == "create" and not snapshot:
                 snapshot = datetime.now(timezone.utc).strftime("ha-%Y%m%d-%H%M%S-") + uuid4().hex[:6]
