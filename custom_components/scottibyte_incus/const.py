@@ -1,7 +1,7 @@
 """Constants for ScottiBYTE Incus."""
 
 DOMAIN = "scottibyte_incus"
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 PLATFORMS = ["sensor", "binary_sensor"]
 PANEL_URL = "scottibyte-incus"
 STATIC_URL = "/scottibyte_incus_static"
