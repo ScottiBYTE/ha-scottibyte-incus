@@ -7,12 +7,15 @@ from pathlib import Path
 from homeassistant.components import panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.helpers import config_validation as cv
 
 from . import websocket
 from .api import IncusClient, make_ssl_context
 from .bootstrap import api_url
 from .const import DOMAIN, PANEL_URL, PLATFORMS, STATIC_URL, VERSION
 from .coordinator import IncusCoordinator
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass, config):
