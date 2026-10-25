@@ -70,6 +70,17 @@ def main():
                 assert page.locator(".server-card").count() == 3
                 assert page.locator(".stat").count() == 6
                 page.locator("#reorder").click()
+                handle = page.locator('[data-card="storm"] .drag-handle')
+                target = page.locator('[data-card="rain"]')
+                start, end = handle.bounding_box(), target.bounding_box()
+                page.mouse.move(start["x"] + start["width"]/2, start["y"] + start["height"]/2)
+                page.mouse.down()
+                page.evaluate("document.querySelector('scottibyte-incus-panel').refresh()")
+                page.mouse.move(end["x"] + end["width"]/2, end["y"] + end["height"]/2, steps=12)
+                page.mouse.up()
+                assert page.locator(".server-card").last.get_attribute("data-server") == "storm"
+                page.locator("#cancel-order").click()
+                page.locator("#reorder").click()
                 page.locator('[data-move="mist"][data-step="-1"]').click()
                 assert page.locator(".server-card").first.get_attribute("data-server") == "mist"
                 page.locator("#cancel-order").click()
