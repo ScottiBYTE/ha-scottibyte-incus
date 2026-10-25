@@ -58,6 +58,11 @@ async def async_setup_entry(hass, entry):
     try:
         await coordinator.load_snapshot()
         await coordinator.async_config_entry_first_refresh()
+        # Upgrade only the old generic label; preserve deliberately chosen names.
+        if entry.title.strip().casefold() == "incus":
+            detected_name = str(coordinator.snapshot.get("server_name") or entry.data.get("server_name") or "").strip()
+            if detected_name and detected_name.casefold() != "incus":
+                hass.config_entries.async_update_entry(entry, title=detected_name)
         hass.data[DOMAIN]["coordinators"][entry.entry_id] = coordinator
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except BaseException:

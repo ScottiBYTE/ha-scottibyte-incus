@@ -19,7 +19,8 @@ def isolated_config(hass, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_setup_entities_panel_and_unload(hass):
+@pytest.mark.parametrize("entry_title", ["vmsstorm", "Incus"])
+async def test_setup_entities_panel_and_unload(hass, entry_title):
     directory = Path(hass.config.path(".storage", DOMAIN, "test"))
     directory.mkdir(parents=True)
     cert, key = generate_certificate()
@@ -27,7 +28,7 @@ async def test_setup_entities_panel_and_unload(hass):
     (directory / "server.crt").write_text(cert)
     entry = MockConfigEntry(
         domain=DOMAIN,
-        title="vmsstorm",
+        title=entry_title,
         unique_id="test",
         data={
             "credential_id": "test",
@@ -45,6 +46,7 @@ async def test_setup_entities_panel_and_unload(hass):
     with patch("custom_components.scottibyte_incus.api.IncusClient.inventory", new=AsyncMock(return_value=inventory)):
         assert await async_setup_component(hass, DOMAIN, {})
         await hass.async_block_till_done()
+        assert entry.title == "vmsstorm"
         assert entry.state.value == "loaded"
         assert hass.states.get("sensor.vmsstorm_running").state == "1"
         assert hass.states.get("binary_sensor.vmsstorm_connectivity").state == "on"
@@ -81,7 +83,8 @@ async def test_config_flow_menu_and_host_confirmation(hass):
 
 
 @pytest.mark.asyncio
-async def test_finished_setup_does_not_persist_ssh_credentials(hass):
+@pytest.mark.parametrize(("requested_name", "expected_title"), [(None, "demo-1"), ("", "demo-1"), ("Incus", "demo-1"), (" Office lab ", "Office lab")])
+async def test_finished_setup_does_not_persist_ssh_credentials(hass, requested_name, expected_title):
     assert await async_setup_component(hass, DOMAIN, {})
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "ssh"})
@@ -90,7 +93,7 @@ async def test_finished_setup_does_not_persist_ssh_credentials(hass):
         flow = await hass.config_entries.flow.async_configure(
             flow["flow_id"],
             {
-                "name": "demo-1",
+                **({"name": requested_name} if requested_name is not None else {}),
                 "host": "172.16.0.10",
                 "ssh_port": 22,
                 "api_port": 8443,
@@ -112,6 +115,7 @@ async def test_finished_setup_does_not_persist_ssh_credentials(hass):
         flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {})
         await hass.async_block_till_done()
     assert flow["type"] == "create_entry"
+    assert flow["result"].title == expected_title
     assert "do-not-save" not in str(flow["data"]) and "also-private" not in str(flow["data"])
     assert not {"password", "sudo_password", "ssh_key", "username", "token"} & flow["data"].keys()
     directory = Path(hass.config.path(".storage", DOMAIN, flow["data"]["credential_id"]))

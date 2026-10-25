@@ -55,7 +55,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="ssh",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default="Incus"): str,
+                    vol.Optional("name", default=""): str,
                     vol.Required("host"): str,
                     vol.Required("ssh_port", default=22): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
                     vol.Required("api_port", default=8443): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
@@ -122,7 +122,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="token",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default="Incus"): str,
+                    vol.Optional("name", default=""): str,
                     vol.Required("host"): str,
                     vol.Required("api_port", default=8443): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
                     vol.Required("token"): text(secret=True),
@@ -141,6 +141,9 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
         projects = parse_projects(settings["projects"])
+        detected_name = str(info.get("environment", {}).get("server_name") or "").strip()
+        requested_name = str(settings.get("name") or "").strip()
+        display_name = requested_name if requested_name and requested_name.casefold() != "incus" else detected_name or settings["host"]
         ident = uuid4().hex
         directory = Path(self.hass.config.path(".storage", DOMAIN, ident))
 
@@ -151,13 +154,13 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         await self.hass.async_add_executor_job(save)
         return self.async_create_entry(
-            title=settings["name"],
+            title=display_name,
             data={
                 "host": settings["host"],
                 "api_port": settings["api_port"],
                 "projects": projects,
                 "credential_id": ident,
-                "server_name": info.get("environment", {}).get("server_name", settings["name"]),
+                "server_name": detected_name or settings["host"],
                 "fingerprint": unique_id,
             },
         )

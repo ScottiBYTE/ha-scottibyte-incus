@@ -11,9 +11,9 @@
       },
       "ssh": {
         "title": "Connect to your Incus server",
-        "description": "Enter a host account that can administer Incus, directly or through sudo. SSH credentials are used only during setup and are not saved. This connection grants Home Assistant Incus management access. Projects: * for all, or comma-separated names. Automatic HTTPS setup enables Incus on all host interfaces at the selected API port if no listener exists. Existing listeners and firewall rules are left unchanged.",
+        "description": "Leave the display name blank to use the server hostname automatically. Enter a host account that can administer Incus, directly or through sudo. SSH credentials are used only during setup and are not saved. This connection grants Home Assistant Incus management access. Projects: * for all, or comma-separated names. Automatic HTTPS setup enables Incus on all host interfaces at the selected API port if no listener exists. Existing listeners and firewall rules are left unchanged.",
         "data": {
-          "name": "Display name",
+          "name": "Display name (optional; detected from server)",
           "host": "Server IP address or hostname",
           "ssh_port": "SSH port",
           "api_port": "Incus HTTPS port",
@@ -36,9 +36,9 @@
       },
       "token": {
         "title": "Enroll with an existing trust token",
-        "description": "The token enrolls a new Home Assistant client certificate. It is consumed during setup and is not saved.",
+        "description": "Leave the display name blank to use the server hostname automatically. The token enrolls a new Home Assistant client certificate. It is consumed during setup and is not saved.",
         "data": {
-          "name": "Display name",
+          "name": "Display name (optional; detected from server)",
           "host": "Server IP address or hostname",
           "api_port": "Incus HTTPS port",
           "token": "One-time Incus trust token",

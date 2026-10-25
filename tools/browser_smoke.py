@@ -66,6 +66,7 @@ def main():
                 page.wait_for_selector("scottibyte-incus-panel .server-card")
                 assert page.locator(".server-card").count() == 3
                 assert page.locator(".stat").count() == 6
+                assert page.locator("a.add-server").get_attribute("href") == "/config/integrations/dashboard/add?domain=scottibyte_incus"
                 assert "2 / 3" in page.locator("#summary").inner_text()
                 page.screenshot(path=str(screenshots / "overview.png"), full_page=True)
                 page.locator("#search").fill("assist")
@@ -136,6 +137,7 @@ def main():
                 page.set_viewport_size({"width": 390, "height": 844})
                 page.screenshot(path=str(screenshots / "mobile.png"), full_page=True)
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                assert page.locator("a.add-server").is_visible()
                 assert not errors, errors
                 browser.close()
                 print(
