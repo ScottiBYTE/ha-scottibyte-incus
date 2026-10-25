@@ -2,7 +2,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 0.1.0 — initial testing build.** Tested locally with Home Assistant 2026.10.4 and simulated Incus HTTPS/SSH endpoints. Live Incus-host validation is required before publishing a stable release. This repository is not yet in HACS's default catalog.
+**Version 0.1.5 — preparing for v1.0.** Live monitoring, multiple-server enrollment, HACS custom-repository installation, reverse DNS, and drag-and-drop reordering have been exercised on Scott's installation. Additional live acceptance testing is required before declaring a stable release. This repository is not yet in HACS's default catalog.
 
 ## Features
 
@@ -11,6 +11,7 @@ A HACS-installable custom integration that brings multiple Incus servers into on
 - Combined totals for instances, running/stopped instances, containers, VMs, and reachable servers.
 - Server cards, per-server sortable instance tables, and global search by instance, server, project, status, IP, DNS label, or MAC.
 - Start containers and VMs; request orderly shutdown with a confirmation that identifies the instance.
+- Create named or automatically named snapshots for containers and VMs; list creation/expiry times, rename, delete, and restore snapshots through the snapshot manager.
 - Embedded root terminals for running Linux system containers, using Incus interactive execution. No SSH server is needed inside containers.
 - Administrator-only panel and backend management/terminal API.
 - Native Home Assistant devices and entities for automation and history.
@@ -30,17 +31,16 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 
 ## Install through HACS
 
-The intended repository URL is `https://github.com/ScottiBYTE/ha-scottibyte-incus`. The source package does not create or publish that repository automatically. If you choose a different repository name, update the documentation and issue-tracker URLs in `manifest.json` before publishing.
+1. In HACS, open **Custom repositories**, add `https://github.com/ScottiBYTE/ha-scottibyte-incus`, and select **Integration**.
+2. Find **ScottiBYTE Incus**, download it, then restart Home Assistant.
+3. Open **Settings → Devices & services → Add integration → ScottiBYTE Incus**.
+4. Choose **Automatic setup using SSH**.
+5. Enter the server address, SSH credentials, and API port. Leave the optional display name blank to use the detected hostname.
+6. Verify the displayed SSH host-key fingerprint, then continue. On the server, compare with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` when that is the offered key.
+7. Open **Incus** in the HA sidebar.
+8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-1. Publish this repository to GitHub.
-2. In HACS, open **Custom repositories**, add your repository URL, and select **Integration**.
-3. Find **ScottiBYTE Incus**, download it, then restart Home Assistant.
-4. Open **Settings → Devices & services → Add integration → ScottiBYTE Incus**.
-5. Choose **Automatic setup using SSH**.
-6. Enter the server address, display name, SSH credentials, and API port.
-7. Verify the displayed SSH host-key fingerprint, then continue. On the server, an administrator can compare it with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` when that is the key offered by SSH.
-8. Open **Incus** in the HA sidebar.
-9. Use **Add integration** again to enroll another independent server.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). The first tagged prerelease is **v0.1.5**. In HACS, enable **Show beta versions** when necessary to select a prerelease. Confirm the downloaded version after installation. Tracking `main` remains a testing workflow.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
@@ -78,8 +78,13 @@ For installations where SSH is unavailable, create a one-time token using Incus 
 
 The top row shows combined inventory totals; server cards sit below it. Click a card to open that server's instance table. Search always spans all configured servers, including while viewing one server. Click a server name in a search result to open its inventory.
 
+- **Reorder servers** enables drag handles and arrow controls. Drag a handle onto another card, then **Save order**; **Cancel** discards edits. The order is shared across users and devices and stored in HA. Newly enrolled servers appear at the end.
+- **Manage servers** opens the native integration page, where server entries can be renamed or deleted.
 - **Start** is available for stopped instances.
 - **Stop** requests graceful shutdown with a 60-second guest timeout. There is no forced-stop button in version one.
+- **Snapshot** opens a named-snapshot form; leave the name blank for an automatic name. **Manage snapshots** (the compact **Manage** button beside Snapshot) lists existing snapshots, creation/expiry dates, and whether saved memory is present. New snapshots omit running memory and inherit the server's snapshot-expiry policy.
+- Snapshot rename, delete, and restore are available in the manager. Delete and restore require confirmation. Restore requires a live **Stopped** state and restores disk/configuration without saved running memory; the integration never force-stops an instance for restore. Mutations share the instance's lifecycle-operation lock and wait for Incus completion. An operation can continue if the browser disconnects; refresh before retrying after a timeout.
+- Snapshots reside with the instance and do not replace external backups. Attached custom storage volumes are excluded. Applications may require their own quiescing or backup procedures for consistency.
 - **Terminal** is available only for running system containers. It opens a root shell, closes on disconnect/unsubscribe, and sends SIGHUP to the shell on cleanup. Sessions close after 15 minutes without keyboard input or four hours total. There is a limit of two terminals per HA user and ten overall.
 - Action requests recheck live instance state and serialize operations per instance. Success is displayed only after Incus reports the operation completed.
 - A browser disconnection does not cancel an already requested start/stop operation. Refresh to see the resulting state.
@@ -94,20 +99,27 @@ Status values include `Running`, `Stopped`, transitional states, and `unavailabl
 
 ## Metric details and limitations
 
-- CPU is calculated from successive cumulative CPU samples: **100% equals one CPU core**, so multi-core workloads can exceed 100%. It needs two successful samples and resets after reconnection or a counter reset.
+- The table's **CPU % of host** is an instance's share of its host's logical CPU capacity, averaged over the polling interval. For example, 7.62 busy logical CPUs on a 32-thread host is 23.8%. This is not usage relative to the instance's CPU limit and is not the host's total system load. Details show cores used and the host CPU count.
+- Capacity is read from the Incus resources API, separately for each cluster member, and cached for five minutes. Missing capacity produces an unknown percentage. CPU usage requires two successful samples and resets after reconnection, a counter reset, or a detected cluster-member move.
+- The existing CPU entity retains the per-core percentage for automation compatibility (100% = one logical CPU). A separate disabled-by-default **CPU host share** entity exposes the normalized percentage.
 - Memory is used bytes plus a configured absolute memory limit, when available. A percentage limit is not converted to a guessed capacity.
 - Disk is root-disk usage plus the configured root-disk size limit when reported. A missing configured limit is not the storage pool's total free space.
 - IP/MAC information comes from Incus instance state. A VM without a functioning Incus agent may have no guest IP or usage information.
-- DNS labels come from optional instance configuration `user.dns_name`. The integration does not assume the instance name is a real DNS record and does not perform reverse lookups.
+- Primary IP selection prefers an explicitly named Incus NIC, then ordinary guest interfaces, ahead of recognizable nested Docker/bridge interfaces. IPv4 is preferred within the same interface tier. All reported addresses remain in Details. This is a heuristic, not route discovery; unusual multi-NIC configurations need validation.
+- DNS labels prefer explicit `user.dns_name`, otherwise cached reverse lookups through HA's system resolver. Successful results are cached for ten minutes, missing records for one minute. Queries run in the background and names appear on a subsequent inventory poll. No Pi-hole credentials are needed. DHCP must configure a resolver that can answer local PTR queries. A forward DNS record alone does not guarantee a PTR record.
 - VM start/stop is included. VM shells, serial consoles, and graphical consoles are not included in version one.
 - Cluster inventory is grouped under one configured entry; instance location is displayed under its server label. Shared server-certificate fingerprints prevent enrolling the same cluster more than once. Servers deliberately reusing identical certificates will also be treated as duplicates.
 - Snapshot checkpoints are saved approximately every two minutes. A crash can lose recent inventory changes.
 - Removed instances leave their registered HA entities unavailable; automatic registry cleanup is deferred.
-- Readdressing a server, changing selected projects, or rotating its certificate currently requires removing and enrolling the entry again. Reconfiguration/reauthentication flows are future work. Removing an entry resets its entity identities on re-addition.
+- Use the server entry’s **Reconfigure** action to change its address, API port, or projects after testing the connection with existing pinned trust. Choose **Renew certificate trust** for SSH/token enrollment after certificate changes. Both preserve the config-entry ID, entity IDs, and server order. Renewal retires the previous client identity when it can; a notification identifies any manual cleanup needed.
 
 ## Removal and trust revocation
 
-Removing the integration entry deletes its local credential directory and saved inventory. It does **not** automatically revoke the remote certificate. Before removing an entry, record its client-certificate fingerprint if you want to revoke its server trust. An Incus administrator can inspect `incus config trust list` and remove the matching HA identity with `incus config trust remove <fingerprint>`. Do not remove a different HA installation's certificate by name alone.
+Deleting a server entry first attempts to revoke **only that entry's client-certificate fingerprint** from the Incus trust store, then deletes its local credential directory and saved inventory. Containers and VMs keep running. No guest is deleted or stopped.
+
+If the server is unavailable or rejects revocation, local removal still succeeds. A persistent HA notification provides the fingerprint and manual cleanup command. On that server, inspect `incus config trust list` and remove the matching certificate using `incus config trust remove <fingerprint>`. Do not identify a certificate by name alone.
+
+Renaming an entry is supported through HA’s native integration page. Use **Reconfigure** on that entry for connection changes or trust renewal. Changes are validated before saving; failed connection tests preserve the existing configuration.
 
 ## Troubleshooting
 
@@ -115,7 +127,7 @@ Removing the integration entry deletes its local credential directory and saved 
 | --- | --- |
 | Cannot obtain SSH host key | Address, SSH port, HA-to-server routing, and SSH service |
 | SSH succeeds but enrollment fails | Incus permissions, sudo password, selected HTTPS port, existing listener binding, firewall |
-| Server becomes unavailable after certificate changes | Re-enroll with the new server certificate; trust is pinned deliberately |
+| Server becomes unavailable after certificate changes | Use Reconfigure → Renew certificate trust; verify the server identity again |
 | Missing VM IP or metrics | Incus agent inside that VM |
 | No terminal button | A running Linux system container is required |
 | Blank/missing panel after an update | Reload the HA browser/app frontend; confirm the bundled frontend directory was installed |

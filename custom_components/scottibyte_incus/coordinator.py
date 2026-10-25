@@ -49,7 +49,8 @@ class IncusCoordinator(DataUpdateCoordinator):
             elapsed = now - self._sample_at if self._sample_at is not None else 0
             previous = {(i["project"], i["name"]): i for i in self.snapshot["instances"]} if self._sample_at else {}
             instances = [
-                normalize_instance(item, project, previous.get((project, item["name"])), elapsed)
+                normalize_instance(item, project, previous.get((project, item["name"])), elapsed,
+                    info.get("host_cpu_counts", {}).get(str(item.get("location") or "") if info.get("environment", {}).get("server_clustered") else ""))
                 for project, item in raw
             ]
             self.dns.apply(instances)

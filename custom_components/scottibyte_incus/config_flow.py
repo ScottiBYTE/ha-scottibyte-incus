@@ -1,5 +1,6 @@
 """UI setup, with a separate SSH identity confirmation before credential use."""
 
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,11 +9,13 @@ try:
 except ImportError:  # Home Assistant versions before the schema migration
     import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components import persistent_notification
 from homeassistant.helpers import selector
 
-from .api import certificate_fingerprint
+from .api import IncusClient, certificate_fingerprint, make_ssl_context
 from .bootstrap import (
     EnrollmentError,
+    api_url,
     discover_server,
     enroll_ssh,
     enroll_token,
@@ -33,6 +36,55 @@ def text(secret=False, multiline=False):
 
 class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    async def async_step_reconfigure(self, user_input=None):
+        self._editing_entry = self._get_reconfigure_entry()
+        return self.async_show_menu(step_id="reconfigure", menu_options=["connection", "renew_trust"])
+
+    async def async_step_reauth(self, entry_data):
+        self._editing_entry = self._get_reauth_entry()
+        return await self.async_step_renew_trust()
+
+    async def async_step_renew_trust(self, user_input=None):
+        return await self.async_step_user()
+
+    def _default(self, key, fallback=""):
+        entry = getattr(self, "_editing_entry", None)
+        if entry:
+            if key == "name":
+                return entry.title
+            if key == "projects":
+                return ",".join(entry.data["projects"])
+            return entry.data.get(key, fallback)
+        return fallback
+
+    async def async_step_connection(self, user_input=None):
+        entry = self._editing_entry
+        errors = {}
+        if user_input is not None:
+            client = None
+            try:
+                host = validate_host(user_input["host"])
+                projects = parse_projects(user_input["projects"])
+                directory = Path(self.hass.config.path(".storage", DOMAIN, entry.data["credential_id"]))
+
+                def context():
+                    return make_ssl_context((directory / "server.crt").read_text(), directory / "client.crt", directory / "client.key")
+
+                client = IncusClient(api_url(host, user_input["api_port"]), await self.hass.async_add_executor_job(context))
+                await client.inventory(projects)
+                return self.async_update_reload_and_abort(entry, data_updates={
+                    "host": host, "api_port": user_input["api_port"], "projects": projects})
+            except Exception:
+                errors["base"] = "connection_failed"
+            finally:
+                if client:
+                    await client.close()
+        return self.async_show_form(step_id="connection", data_schema=vol.Schema({
+            vol.Required("host", default=entry.data["host"]): str,
+            vol.Required("api_port", default=entry.data["api_port"]): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+            vol.Required("projects", default=",".join(entry.data["projects"])): str,
+        }), errors=errors)
 
     async def async_step_user(self, user_input=None):
         return self.async_show_menu(step_id="user", menu_options=["ssh", "token"])
@@ -55,16 +107,16 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="ssh",
             data_schema=vol.Schema(
                 {
-                    vol.Optional("name", default=""): str,
-                    vol.Required("host"): str,
+                    vol.Optional("name", default=self._default("name")): str,
+                    vol.Required("host", default=self._default("host")): str,
                     vol.Required("ssh_port", default=22): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
-                    vol.Required("api_port", default=8443): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+                    vol.Required("api_port", default=self._default("api_port", 8443)): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
                     vol.Required("username"): str,
                     vol.Optional("password"): text(secret=True),
                     vol.Optional("sudo_password"): text(secret=True),
                     vol.Optional("ssh_key"): text(secret=True, multiline=True),
                     vol.Optional("key_passphrase"): text(secret=True),
-                    vol.Required("projects", default="*"): str,
+                    vol.Required("projects", default=self._default("projects", "*")): str,
                     vol.Required("enable_https", default=True): bool,
                 }
             ),
@@ -122,28 +174,35 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="token",
             data_schema=vol.Schema(
                 {
-                    vol.Optional("name", default=""): str,
-                    vol.Required("host"): str,
-                    vol.Required("api_port", default=8443): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+                    vol.Optional("name", default=self._default("name")): str,
+                    vol.Required("host", default=self._default("host")): str,
+                    vol.Required("api_port", default=self._default("api_port", 8443)): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
                     vol.Required("token"): text(secret=True),
-                    vol.Required("projects", default="*"): str,
+                    vol.Required("projects", default=self._default("projects", "*")): str,
                 }
             ),
             errors=errors,
         )
 
     def _known_fingerprints(self):
-        return {e.data.get("fingerprint") for e in self._async_current_entries()}
+        return {e.data.get("fingerprint") for e in self._async_current_entries() if e is not getattr(self, "_editing_entry", None)}
 
     async def _finish(self, settings, pem, info, cert, key):
         # Cluster members share a certificate: adding the same cluster twice is rejected.
         unique_id = certificate_fingerprint(pem)
         await self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured()
+        if not getattr(self, "_editing_entry", None):
+            self._abort_if_unique_id_configured()
+        elif unique_id in self._known_fingerprints():
+            return self.async_abort(reason="already_configured")
         projects = parse_projects(settings["projects"])
         detected_name = str(info.get("environment", {}).get("server_name") or "").strip()
         requested_name = str(settings.get("name") or "").strip()
-        display_name = requested_name if requested_name and requested_name.casefold() != "incus" else detected_name or settings["host"]
+        display_name = (
+            requested_name
+            if requested_name and requested_name.casefold() != "incus"
+            else detected_name or settings["host"]
+        )
         ident = uuid4().hex
         directory = Path(self.hass.config.path(".storage", DOMAIN, ident))
 
@@ -153,24 +212,48 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             (directory / "server.crt").write_text(pem)
 
         await self.hass.async_add_executor_job(save)
-        return self.async_create_entry(
-            title=display_name,
-            data={
-                "host": settings["host"],
-                "api_port": settings["api_port"],
-                "projects": projects,
-                "credential_id": ident,
-                "server_name": detected_name or settings["host"],
-                "fingerprint": unique_id,
-            },
-        )
+        data = {
+            "host": settings["host"], "api_port": settings["api_port"], "projects": projects,
+            "credential_id": ident, "server_name": detected_name or settings["host"], "fingerprint": unique_id,
+        }
+        entry = getattr(self, "_editing_entry", None)
+        if entry is None:
+            return self.async_create_entry(title=display_name, data=data)
+        old_directory = Path(self.hass.config.path(".storage", DOMAIN, entry.data["credential_id"]))
+        old_fingerprint = None
+        try:
+            old_fingerprint = await self.hass.async_add_executor_job(
+                lambda: certificate_fingerprint((old_directory / "client.crt").read_text()))
+        except OSError:
+            pass
+        result = self.async_update_reload_and_abort(entry, unique_id=unique_id, title=display_name, data=data)
+        if old_fingerprint:
+            client = None
+            try:
+                context = await self.hass.async_add_executor_job(
+                    lambda: make_ssl_context(pem, directory / "client.crt", directory / "client.key"))
+                client = IncusClient(api_url(settings["host"], settings["api_port"]), context)
+                # A missing identity needs no cleanup; avoid DELETE returning a noisy 404.
+                identities = await client.metadata("/1.0/certificates", params={"recursion": 1})
+                if any(item.get("fingerprint") == old_fingerprint for item in identities):
+                    await client.request("DELETE", f"/1.0/certificates/{old_fingerprint}", timeout=10)
+            except Exception:
+                persistent_notification.async_create(self.hass,
+                    f"Trust was renewed for {display_name}, but the previous client certificate may remain trusted. "
+                    f"Inspect the previous server's trust list and remove only fingerprint {old_fingerprint} if present.",
+                    title="Incus previous trust cleanup", notification_id=f"{DOMAIN}_renew_{entry.entry_id}")
+            finally:
+                if client:
+                    await client.close()
+        await self.hass.async_add_executor_job(shutil.rmtree, old_directory, True)
+        return result
 
     @staticmethod
     def async_get_options_flow(config_entry):
         return IncusOptionsFlow()
 
 
-class IncusOptionsFlow(config_entries.OptionsFlow):
+class IncusOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_init(self, user_input=None):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)

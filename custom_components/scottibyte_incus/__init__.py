@@ -1,20 +1,23 @@
 """ScottiBYTE Incus integration and bundled dashboard."""
 
 import asyncio
+import logging
 import shutil
 from pathlib import Path
 
-from homeassistant.components import panel_custom
+from homeassistant.components import panel_custom, persistent_notification
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 
 from . import websocket
-from .api import IncusClient, make_ssl_context
+from .api import IncusClient, certificate_fingerprint, make_ssl_context
 from .bootstrap import api_url
 from .const import DOMAIN, PANEL_URL, PLATFORMS, STATIC_URL, VERSION
 from .coordinator import IncusCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -73,14 +76,10 @@ async def async_setup_entry(hass, entry):
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except BaseException:
         hass.data[DOMAIN]["coordinators"].pop(entry.entry_id, None)
+        await coordinator.dns.close()
         await client.close()
         raise
-    entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
-
-
-async def _options_updated(hass, entry):
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass, entry):
@@ -97,9 +96,32 @@ async def async_unload_entry(hass, entry):
 
 
 async def async_remove_entry(hass, entry):
-    """Remove local credentials; remote trust revocation is documented separately."""
+    """Revoke only this entry's identity; allow local removal if unreachable."""
     directory = Path(hass.config.path(".storage", DOMAIN, entry.data["credential_id"]))
-    await hass.async_add_executor_job(shutil.rmtree, directory, True)
-    from homeassistant.helpers.storage import Store
+    client = None
+    fingerprint = None
 
+    def credentials():
+        fingerprint = certificate_fingerprint((directory / "client.crt").read_text())
+        context = make_ssl_context((directory / "server.crt").read_text(), directory / "client.crt", directory / "client.key")
+        return fingerprint, context
+
+    try:
+        fingerprint, context = await hass.async_add_executor_job(credentials)
+        client = IncusClient(api_url(entry.data["host"], entry.data["api_port"]), context)
+        await client.request("DELETE", f"/1.0/certificates/{fingerprint}", timeout=10)
+    except Exception:
+        _LOGGER.warning("Could not revoke remote trust for removed Incus server %s", entry.title)
+        persistent_notification.async_create(
+            hass,
+            f"Server {entry.title} was removed from Home Assistant, but its remote trust could not be revoked. "
+            f"On that Incus server, inspect `incus config trust list` and remove only the matching certificate "
+            f"with `incus config trust remove {fingerprint or '<matching fingerprint>'}`. Guests are unaffected.",
+            title="Incus trust cleanup required",
+            notification_id=f"{DOMAIN}_trust_{entry.entry_id}",
+        )
+    finally:
+        if client:
+            await client.close()
+    await hass.async_add_executor_job(shutil.rmtree, directory, True)
     await Store(hass, 1, f"{DOMAIN}.inventory.{entry.entry_id}").async_remove()

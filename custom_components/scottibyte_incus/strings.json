@@ -3,7 +3,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add an Incus server",
+        "title": "Connect or renew an Incus server",
         "menu_options": {
           "ssh": "Automatic setup using SSH (recommended)",
           "token": "Advanced: existing trust token"
@@ -44,12 +44,29 @@
           "token": "One-time Incus trust token",
           "projects": "Projects (* or comma-separated names)"
         }
+      },
+      "reconfigure": {
+        "title": "Manage Incus server connection",
+        "menu_options": {
+          "connection": "Change address, port, or projects (keep existing trust)",
+          "renew_trust": "Renew certificate trust using SSH or a one-time token"
+        }
+      },
+      "connection": {
+        "title": "Update server connection",
+        "description": "Connect to the same Incus server using its existing pinned certificate. The connection and selected projects are checked before saving. Devices, entities, and server order are preserved. Use Renew certificate trust if the server certificate has changed.",
+        "data": {
+          "host": "Server IP address or hostname",
+          "api_port": "Incus HTTPS port",
+          "projects": "Projects (* or comma-separated names)"
+        }
       }
     },
     "error": {
       "invalid_host": "Enter a hostname or IP address without a URL or port.",
       "ssh_unreachable": "Could not read the server SSH host key. Check the address, SSH port, and network access.",
-      "token_failed": "Enrollment failed. Check the token, address, port, and projects. Tokens are single-use; generate another if already consumed."
+      "token_failed": "Enrollment failed. Check the token, address, port, and projects. Tokens are single-use; generate another if already consumed.",
+      "connection_failed": "Could not validate the connection and projects using existing trust. Check the address, port, projects, and server availability. For a changed certificate, use Renew certificate trust."
     },
     "abort": {
       "already_configured": "This Incus server or cluster is already configured."

@@ -1,5 +1,6 @@
 """Pure inventory normalization; no Home Assistant dependencies."""
 
+import ipaddress
 import re
 from datetime import datetime, timezone
 
@@ -17,7 +18,27 @@ def size_bytes(value):
     return int(float(number) * base**power)
 
 
-def normalize_instance(raw, project, previous=None, elapsed=0):
+def preferred_ip(state, devices):
+    """Prefer the configured guest NIC over nested Docker/bridge interfaces."""
+    configured = {device.get("name") or key for key, device in devices.items() if device.get("type") == "nic"}
+    candidates = []
+    for nic, data in (state.get("network") or {}).items():
+        if nic == "lo" or data.get("type") == "loopback":
+            continue
+        nested = nic.startswith(("docker", "br-", "veth", "virbr", "cni", "flannel", "kube", "podman"))
+        rank = 0 if nic in configured else 2 if nested or data.get("type") == "bridge" else 1
+        for item in data.get("addresses") or []:
+            try:
+                address = ipaddress.ip_address(item.get("address", ""))
+            except ValueError:
+                continue
+            if item.get("scope") not in ("global", "site") or address.is_loopback or address.is_link_local or address.is_unspecified or address.is_multicast:
+                continue
+            candidates.append((rank, address.version, nic, str(address)))
+    return min(candidates)[-1] if candidates else None
+
+
+def normalize_instance(raw, project, previous=None, elapsed=0, host_cpus=None):
     """Normalize recursion=2 records, leaving unreported values unset."""
     state = raw.get("state") or {}
     config = raw.get("expanded_config") or raw.get("config") or {}
@@ -37,7 +58,7 @@ def normalize_instance(raw, project, previous=None, elapsed=0):
     cpu = None
     if status == "Running" and previous and elapsed > 0 and cpu_ns is not None:
         old = previous.get("cpu_ns")
-        if old is not None and cpu_ns >= old:
+        if old is not None and cpu_ns >= old and previous.get("location", "") == raw.get("location", ""):
             cpu = round((cpu_ns - old) / (elapsed * 1e9) * 100, 1)
     root = next((d for d in devices.values() if d.get("type") == "disk" and d.get("path") == "/"), {})
     disks = state.get("disk") or {}
@@ -50,10 +71,14 @@ def normalize_instance(raw, project, previous=None, elapsed=0):
         "status": status,
         "status_code": raw.get("status_code", state.get("status_code")),
         "ips": sorted(set(ips)),
+        "primary_ip": preferred_ip(state, devices),
         "macs": sorted(set(macs)),
         "dns": config.get("user.dns_name", ""),
         "cpu_ns": cpu_ns,
         "cpu_percent": cpu,
+        "cpu_cores_used": round(cpu / 100, 3) if cpu is not None else None,
+        "host_cpu_count": host_cpus,
+        "cpu_host_percent": round(cpu / host_cpus, 1) if cpu is not None and host_cpus else None,
         "memory_bytes": (state.get("memory") or {}).get("usage"),
         "memory_limit": size_bytes(config.get("limits.memory")),
         "disk_bytes": root_state.get("usage"),

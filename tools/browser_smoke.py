@@ -19,7 +19,7 @@ HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport
 body{margin:0;--primary-background-color:#0d121c;--card-background-color:#131c2b;--primary-text-color:#e5eaf3;--secondary-text-color:#94a3b8;--divider-color:#293446}
 </style></head><body><script type="module">
 import '/scottibyte_incus_static/panel.js';
-const make=(name,status,type='container',ip='172.16.1.243')=>({name,status,type,project:'default',location:'',ips:status==='Running'?[ip]:[],macs:['00:16:3e:ab:01:02'],dns:name==='Assist'?'assist':'',cpu_percent:status==='Running'?1.5:null,memory_bytes:status==='Running'?1048576000:null,memory_limit:2147483648,disk_bytes:2147483648,disk_limit:21474836480});
+const make=(name,status,type='container',ip='172.16.1.243')=>({name,status,type,project:'default',location:'',ips:status==='Running'?[ip]:[],macs:['00:16:3e:ab:01:02'],dns:name==='Assist'?'assist':'',cpu_percent:status==='Running'?762:null,cpu_host_percent:status==='Running'?23.8:null,cpu_cores_used:status==='Running'?7.62:null,host_cpu_count:32,primary_ip:status==='Running'?ip:null,memory_bytes:status==='Running'?1048576000:null,memory_limit:2147483648,disk_bytes:2147483648,disk_limit:21474836480});
 window.servers=[
 {id:'storm',name:'vmsstorm',version:'7.5.1',online:true,instances:[make('Assist','Running'),make('Frigate','Stopped'),make('win11','Running','virtual-machine','172.16.1.132')]},
 {id:'mist',name:'vmsmist',version:'7.5.1',online:true,instances:[make('Authentik','Running','container','172.16.1.228'),make('Assist','Running','container','172.16.1.44')]},
@@ -27,12 +27,20 @@ window.servers=[
 ];
 function recalc(){for(const s of servers){s.last_success=new Date().toISOString();s.counts={total:s.instances.length,running:s.instances.filter(i=>i.status==='Running').length,stopped:s.instances.filter(i=>i.status==='Stopped').length,containers:s.instances.filter(i=>i.type==='container').length,vms:s.instances.filter(i=>i.type==='virtual-machine').length};}}
 recalc();window.inputs=[];window.unsubscribed=false;
+let snapshots = [];
 let terminalCallback;
 let serverOrder = JSON.parse(localStorage.getItem('mock-order') || '[]');
 const panel=document.createElement('scottibyte-incus-panel');
 panel.hass={callWS:async message=>{
 if(message.type.endsWith('/dashboard'))return {server_order:serverOrder};
 if(message.type.endsWith('/server_order')){serverOrder=message.order;localStorage.setItem('mock-order',JSON.stringify(serverOrder));return {server_order:serverOrder};}
+if(message.type.endsWith('/snapshots'))return structuredClone(snapshots);
+if(message.type.endsWith('/snapshot_action')){
+ if(message.action==='create')snapshots.push({name:message.snapshot||'ha-auto',created_at:'2026-10-25T12:00:00Z',stateful:false});
+ if(message.action==='rename')snapshots.find(s=>s.name===message.snapshot).name=message.new_name;
+ if(message.action==='delete')snapshots=snapshots.filter(s=>s.name!==message.snapshot);
+ return {};
+}
 if(message.type.endsWith('/inventory'))return structuredClone(servers);
 if(message.type.endsWith('/action')){const i=servers.find(s=>s.id===message.server).instances.find(i=>i.name===message.name);i.status=message.action==='start'?'Running':'Stopped';recalc();}
 if(message.type.endsWith('/terminal_input')){inputs.push(message);if(message.data&&terminalCallback)terminalCallback({data:btoa('root\r\nroot@container:/# ')});}
@@ -101,6 +109,26 @@ def main():
                 assert page.locator("tbody tr").count() == 2
                 page.locator('[data-drill="0"]').click()
                 assert page.locator("tbody tr").count() == 3
+                assert "CPU % of host" in page.locator("thead").inner_text()
+                assert "23.8%" in page.locator("tbody").inner_text()
+                page.locator('[data-snapshot="0"][data-create="yes"]').click()
+                page.locator("#snapshot-name").fill("before-update")
+                page.locator("#snapshot-create").click()
+                page.wait_for_function("document.querySelector('scottibyte-incus-panel').shadowRoot.querySelector('#snapshot-list').textContent.includes('before-update')")
+                page.locator('[data-snap-action="rename"]').click()
+                page.locator("#snapshot-rename").fill("renamed")
+                page.locator("#snapshot-confirm-submit").click()
+                page.wait_for_function("document.querySelector('scottibyte-incus-panel').shadowRoot.querySelector('#snapshot-list').textContent.includes('renamed')")
+                page.locator('[data-snap-action="delete"]').click()
+                page.locator('#snapshot-confirm button[value="cancel"]').click()
+                assert page.locator(".snapshot-item").count() == 1
+                page.locator('[data-snap-action="restore"]').click()
+                assert "Current instance disk and configuration will be replaced" in page.locator("#snapshot-confirm-text").inner_text()
+                page.locator('#snapshot-confirm button[value="cancel"]').click()
+                page.locator('[data-snap-action="delete"]').click()
+                page.locator("#snapshot-confirm-submit").click()
+                page.wait_for_function("document.querySelector('scottibyte-incus-panel').shadowRoot.querySelector('#snapshot-list').textContent.includes('No snapshots')")
+                page.locator("#snapshots-close").click()
                 # Reproduce narrow HA content with long IPv6 and many virtual NICs.
                 page.set_viewport_size({"width": 1220, "height": 1000})
                 page.evaluate("""async () => {

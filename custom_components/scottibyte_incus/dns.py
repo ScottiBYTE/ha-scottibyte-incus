@@ -30,7 +30,7 @@ class ReverseDNS:
                 if address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified:
                     continue
                 ips.append(str(address))
-            ips.sort(key=lambda ip: ipaddress.ip_address(ip).version)
+            ips.sort(key=lambda ip: (ip != item.get("primary_ip"), ipaddress.ip_address(ip).version))
             for ip in ips:
                 cached = self.cache.get(ip)
                 if cached and cached[0]:

@@ -9,7 +9,7 @@ from custom_components.scottibyte_incus import websocket as ws
 from custom_components.scottibyte_incus.const import DOMAIN
 
 
-@pytest.mark.parametrize("handler", [ws.inventory, ws.dashboard, ws.server_order, ws.refresh, ws.action, ws.terminal_open, ws.terminal_input])
+@pytest.mark.parametrize("handler", [ws.inventory, ws.dashboard, ws.server_order, ws.refresh, ws.action, ws.snapshots, ws.snapshot_action, ws.terminal_open, ws.terminal_input])
 def test_non_admin_cannot_call_any_backend_endpoint(handler):
     connection = SimpleNamespace(user=SimpleNamespace(is_admin=False))
     with pytest.raises(Unauthorized):
@@ -70,3 +70,24 @@ async def test_server_order_saved_and_invalid_order_rejected():
         await call_original(ws.server_order, hass, connection, {"id": 2, "order": order})
     assert len(connection.errors) == 2
     assert store.async_save.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_snapshot_restore_requires_live_stopped_state():
+    client = SimpleNamespace(state=AsyncMock(return_value={"status": "Running"}), snapshot_action=AsyncMock(), snapshots=AsyncMock(return_value=[{"name": "before-update"}]))
+    coordinator = SimpleNamespace(client=client, snapshot={"online": True, "instances": [{"name": "Assist", "project": "default"}]}, async_request_refresh=AsyncMock())
+    hass = SimpleNamespace(data={DOMAIN: {"coordinators": {"server": coordinator}, "locks": {}}})
+    connection = Connection()
+    message = {"id": 1, "server": "server", "project": "default", "name": "Assist", "action": "restore", "snapshot": "before-update"}
+    await call_original(ws.snapshot_action, hass, connection, message)
+    assert "Stop the instance" in connection.errors[0][2]
+    client.snapshot_action.assert_not_awaited()
+    client.state.return_value = {"status": "Stopped"}
+    await call_original(ws.snapshot_action, hass, connection, message)
+    client.snapshot_action.assert_awaited_once_with("default", "Assist", "restore", "before-update", "")
+    assert coordinator._sample_at is None
+    coordinator.async_request_refresh.assert_awaited_once()
+    message["snapshot"] = "missing"
+    await call_original(ws.snapshot_action, hass, connection, message)
+    assert "no longer exists" in connection.errors[-1][2]
+    assert client.snapshot_action.await_count == 1

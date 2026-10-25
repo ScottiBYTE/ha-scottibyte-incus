@@ -10,7 +10,8 @@ from .entity import server_device
 
 METRICS = {
     "status": ("Status", None, None),
-    "cpu_percent": ("CPU", "%", None),
+    "cpu_percent": ("CPU per core", "%", None),
+    "cpu_host_percent": ("CPU host share", "%", None),
     "memory_bytes": ("Memory used", "B", SensorDeviceClass.DATA_SIZE),
     "disk_bytes": ("Disk used", "B", SensorDeviceClass.DATA_SIZE),
 }

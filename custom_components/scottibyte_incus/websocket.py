@@ -6,6 +6,8 @@ import logging
 import secrets
 import time
 from contextlib import suppress
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import aiohttp
 
@@ -114,6 +116,52 @@ async def action(hass, connection, msg):
             await coordinator.client.change_state(msg["project"], msg["name"], msg["action"])
             await coordinator.async_request_refresh()
         connection.send_result(msg["id"])
+    except Exception as err:
+        safe_error(connection, msg, err)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/snapshots", **TARGET})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def snapshots(hass, connection, msg):
+    try:
+        coordinator = coordinator_for(hass, msg)
+        connection.send_result(msg["id"], await coordinator.client.snapshots(msg["project"], msg["name"]))
+    except Exception as err:
+        safe_error(connection, msg, err)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/snapshot_action", **TARGET,
+    vol.Required("action"): vol.In(["create", "rename", "delete", "restore"]),
+    vol.Optional("snapshot", default=""): str, vol.Optional("new_name", default=""): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def snapshot_action(hass, connection, msg):
+    try:
+        coordinator = coordinator_for(hass, msg)
+        identity = (msg["server"], msg["project"], msg["name"])
+        lock = hass.data[DOMAIN]["locks"].setdefault(identity, asyncio.Lock())
+        if lock.locked():
+            raise IncusError("An operation is already running for this instance")
+        async with lock:
+            state = await coordinator.client.state(msg["project"], msg["name"])
+            if msg["action"] == "restore" and state.get("status") != "Stopped":
+                raise IncusError("Stop the instance before restoring a snapshot")
+            if msg["action"] == "create" and state.get("status") not in ("Running", "Stopped"):
+                raise IncusError("Instance must be running or stopped to create a snapshot")
+            snapshot = msg.get("snapshot", "").strip()
+            if msg["action"] == "create" and not snapshot:
+                snapshot = datetime.now(timezone.utc).strftime("ha-%Y%m%d-%H%M%S-") + uuid4().hex[:6]
+            if msg["action"] != "create":
+                items = await coordinator.client.snapshots(msg["project"], msg["name"])
+                if not any(item["name"] == snapshot for item in items):
+                    raise IncusError("Snapshot no longer exists; refresh the list")
+            _LOGGER.info("Incus snapshot %s requested by HA user %s on %s/%s/%s", msg["action"], connection.user.id, *identity)
+            await coordinator.client.snapshot_action(msg["project"], msg["name"], msg["action"], snapshot, msg.get("new_name", "").strip())
+            if msg["action"] == "restore":
+                coordinator._sample_at = None
+            await coordinator.async_request_refresh()
+        connection.send_result(msg["id"], {"snapshot": snapshot})
     except Exception as err:
         safe_error(connection, msg, err)
 
@@ -249,5 +297,5 @@ async def close_terminals(hass, server=None):
 
 @callback
 def register(hass):
-    for handler in (inventory, dashboard, server_order, refresh, action, terminal_open, terminal_input):
+    for handler in (inventory, dashboard, server_order, refresh, action, snapshots, snapshot_action, terminal_open, terminal_input):
         websocket_api.async_register_command(hass, handler)
