@@ -1,0 +1,128 @@
+"""Browser regression checks with simulated HA data; no Incus server is contacted.
+
+Requires Playwright and its Chromium browser. Screenshots go to a temporary
+folder by default, or to the directory specified by --screenshots.
+"""
+
+import argparse
+import shutil
+import tempfile
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from threading import Thread
+
+from playwright.sync_api import sync_playwright
+
+ROOT = Path(__file__).resolve().parents[1]
+HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+body{margin:0;--primary-background-color:#0d121c;--card-background-color:#131c2b;--primary-text-color:#e5eaf3;--secondary-text-color:#94a3b8;--divider-color:#293446}
+</style></head><body><script type="module">
+import '/scottibyte_incus_static/panel.js';
+const make=(name,status,type='container',ip='172.16.1.243')=>({name,status,type,project:'default',location:'',ips:status==='Running'?[ip]:[],macs:['00:16:3e:ab:01:02'],dns:name==='Assist'?'assist':'',cpu_percent:status==='Running'?1.5:null,memory_bytes:status==='Running'?1048576000:null,memory_limit:2147483648,disk_bytes:2147483648,disk_limit:21474836480});
+window.servers=[
+{id:'storm',name:'vmsstorm',version:'7.5.1',online:true,instances:[make('Assist','Running'),make('Frigate','Stopped'),make('win11','Running','virtual-machine','172.16.1.132')]},
+{id:'mist',name:'vmsmist',version:'7.5.1',online:true,instances:[make('Authentik','Running','container','172.16.1.228'),make('Assist','Running','container','172.16.1.44')]},
+{id:'rain',name:'vmsrain',version:'7.5.1',online:false,instances:[make('Paperless','Running','container','172.16.1.50')]}
+];
+function recalc(){for(const s of servers){s.last_success=new Date().toISOString();s.counts={total:s.instances.length,running:s.instances.filter(i=>i.status==='Running').length,stopped:s.instances.filter(i=>i.status==='Stopped').length,containers:s.instances.filter(i=>i.type==='container').length,vms:s.instances.filter(i=>i.type==='virtual-machine').length};}}
+recalc();window.inputs=[];window.unsubscribed=false;
+let terminalCallback;
+const panel=document.createElement('scottibyte-incus-panel');
+panel.hass={callWS:async message=>{
+if(message.type.endsWith('/inventory'))return structuredClone(servers);
+if(message.type.endsWith('/action')){const i=servers.find(s=>s.id===message.server).instances.find(i=>i.name===message.name);i.status=message.action==='start'?'Running':'Stopped';recalc();}
+if(message.type.endsWith('/terminal_input')){inputs.push(message);if(message.data&&terminalCallback)terminalCallback({data:btoa('root\r\nroot@container:/# ')});}
+},connection:{subscribeMessage:async(cb,msg)=>{terminalCallback=cb;setTimeout(()=>{cb({session:'fake-session'});cb({data:btoa('root@container:/# ')});},20);return async()=>{window.unsubscribed=true;};}}};
+document.body.append(panel);
+</script></body></html>"""
+
+
+class QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--screenshots", type=Path)
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory(prefix="incus-ui-") as directory:
+        webroot = Path(directory)
+        screenshots = args.screenshots or webroot / "screenshots"
+        screenshots.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(ROOT / "custom_components/scottibyte_incus/frontend", webroot / "scottibyte_incus_static")
+        (webroot / "index.html").write_text(HTML)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=directory))
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(args=["--no-sandbox"])
+                page = browser.new_page(viewport={"width": 1600, "height": 1000}, device_scale_factor=1)
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{server.server_port}")
+                page.wait_for_selector("scottibyte-incus-panel .server-card")
+                assert page.locator(".server-card").count() == 3
+                assert page.locator(".stat").count() == 6
+                assert "2 / 3" in page.locator("#summary").inner_text()
+                page.screenshot(path=str(screenshots / "overview.png"), full_page=True)
+                page.locator("#search").fill("assist")
+                assert page.locator("tbody tr").count() == 2
+                page.locator('[data-drill="0"]').click()
+                assert page.locator("tbody tr").count() == 3
+                page.locator("tr").filter(has=page.locator("td strong", has_text="Frigate")).locator(
+                    '[data-action="start"]'
+                ).click()
+                page.wait_for_function(
+                    "document.querySelector('scottibyte-incus-panel').notice.includes('started successfully')"
+                )
+                page.locator("#refresh").click()
+                page.wait_for_timeout(100)
+                page.screenshot(path=str(screenshots / "instances.png"), full_page=True)
+                row = page.locator("tr").filter(has=page.locator("td strong", has_text="Frigate"))
+                row.locator('[data-action="stop"]').click()
+                page.locator('#confirm button[value="cancel"]').click()
+                assert page.evaluate("servers[0].instances[1].status") == "Running"
+                row.locator('[data-action="stop"]').click()
+                page.locator('#confirm button[value="stop"]').click()
+                page.wait_for_function(
+                    "document.querySelector('scottibyte-incus-panel').notice.includes('stopped successfully')"
+                )
+                assist = page.locator("tr").filter(has=page.locator("td strong", has_text="Assist"))
+                assist.locator('[data-action="terminal"]').click()
+                page.wait_for_function(
+                    "document.querySelector('scottibyte-incus-panel').shadowRoot.querySelector('#terminalstatus').textContent==='Connected as root'"
+                )
+                page.keyboard.type("whoami")
+                page.keyboard.press("Enter")
+                page.wait_for_function("inputs.some(i=>i.data)")
+                page.screenshot(path=str(screenshots / "terminal.png"), full_page=True)
+                page.locator("#terminalclose").click()
+                assert page.evaluate("window.unsubscribed")
+                page.locator("#back").click()
+                page.locator('[data-server="rain"]').click()
+                assert page.locator("tbody .stale").count() == 1
+                assert page.locator("tbody button[data-action]:enabled").count() == 0
+                page.locator("#search").fill("<img src=x onerror=alert(1)>")
+                assert page.locator("tbody tr").count() == 0
+                page.locator("#search").fill("")
+                page.locator("#back").click()
+                page.set_viewport_size({"width": 390, "height": 844})
+                page.screenshot(path=str(screenshots / "mobile.png"), full_page=True)
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                assert not errors, errors
+                browser.close()
+                print(
+                    "Browser smoke checks passed: summary, global search, drill-down, start/stop confirmation, terminal input/cleanup, stale controls, mobile width, JavaScript errors."
+                )
+                print(f"Screenshots: {screenshots}")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,68 @@
+{
+  "title": "ScottiBYTE Incus",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add an Incus server",
+        "menu_options": {
+          "ssh": "Automatic setup using SSH (recommended)",
+          "token": "Advanced: existing trust token"
+        }
+      },
+      "ssh": {
+        "title": "Connect to your Incus server",
+        "description": "Enter a host account that can administer Incus, directly or through sudo. SSH credentials are used only during setup and are not saved. This connection grants Home Assistant Incus management access. Projects: * for all, or comma-separated names. Automatic HTTPS setup enables Incus on all host interfaces at the selected API port if no listener exists. Existing listeners and firewall rules are left unchanged.",
+        "data": {
+          "name": "Display name",
+          "host": "Server IP address or hostname",
+          "ssh_port": "SSH port",
+          "api_port": "Incus HTTPS port",
+          "username": "SSH username",
+          "password": "SSH password",
+          "sudo_password": "Sudo password (if different)",
+          "ssh_key": "SSH private key (optional)",
+          "key_passphrase": "SSH key passphrase (optional)",
+          "projects": "Projects",
+          "enable_https": "Enable Incus HTTPS automatically if disabled"
+        }
+      },
+      "confirm_host": {
+        "title": "Verify SSH server identity",
+        "description": "Server: {host}\n\nSSH fingerprint: {fingerprint}\n\nCompare this with your server\u2019s SSH host key fingerprint before continuing. Continuing allows this integration to create Incus certificate trust and, if selected, enable its HTTPS listener. No password has been sent yet."
+      },
+      "failed": {
+        "title": "Server setup did not complete",
+        "description": "{reason}\n\nContinue to try again. SSH credentials have been discarded."
+      },
+      "token": {
+        "title": "Enroll with an existing trust token",
+        "description": "The token enrolls a new Home Assistant client certificate. It is consumed during setup and is not saved.",
+        "data": {
+          "name": "Display name",
+          "host": "Server IP address or hostname",
+          "api_port": "Incus HTTPS port",
+          "token": "One-time Incus trust token",
+          "projects": "Projects (* or comma-separated names)"
+        }
+      }
+    },
+    "error": {
+      "invalid_host": "Enter a hostname or IP address without a URL or port.",
+      "ssh_unreachable": "Could not read the server SSH host key. Check the address, SSH port, and network access.",
+      "token_failed": "Enrollment failed. Check the token, address, port, and projects. Tokens are single-use; generate another if already consumed."
+    },
+    "abort": {
+      "already_configured": "This Incus server or cluster is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Incus polling",
+        "data": {
+          "poll_seconds": "Polling interval in seconds (10\u2013300)"
+        }
+      }
+    }
+  }
+}
