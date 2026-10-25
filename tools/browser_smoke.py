@@ -28,8 +28,11 @@ window.servers=[
 function recalc(){for(const s of servers){s.last_success=new Date().toISOString();s.counts={total:s.instances.length,running:s.instances.filter(i=>i.status==='Running').length,stopped:s.instances.filter(i=>i.status==='Stopped').length,containers:s.instances.filter(i=>i.type==='container').length,vms:s.instances.filter(i=>i.type==='virtual-machine').length};}}
 recalc();window.inputs=[];window.unsubscribed=false;
 let terminalCallback;
+let serverOrder = JSON.parse(localStorage.getItem('mock-order') || '[]');
 const panel=document.createElement('scottibyte-incus-panel');
 panel.hass={callWS:async message=>{
+if(message.type.endsWith('/dashboard'))return {server_order:serverOrder};
+if(message.type.endsWith('/server_order')){serverOrder=message.order;localStorage.setItem('mock-order',JSON.stringify(serverOrder));return {server_order:serverOrder};}
 if(message.type.endsWith('/inventory'))return structuredClone(servers);
 if(message.type.endsWith('/action')){const i=servers.find(s=>s.id===message.server).instances.find(i=>i.name===message.name);i.status=message.action==='start'?'Running':'Stopped';recalc();}
 if(message.type.endsWith('/terminal_input')){inputs.push(message);if(message.data&&terminalCallback)terminalCallback({data:btoa('root\r\nroot@container:/# ')});}
@@ -66,7 +69,21 @@ def main():
                 page.wait_for_selector("scottibyte-incus-panel .server-card")
                 assert page.locator(".server-card").count() == 3
                 assert page.locator(".stat").count() == 6
-                assert page.locator("a.add-server").get_attribute("href") == "/config/integrations/dashboard/add?domain=scottibyte_incus"
+                page.locator("#reorder").click()
+                page.locator('[data-move="mist"][data-step="-1"]').click()
+                assert page.locator(".server-card").first.get_attribute("data-server") == "mist"
+                page.locator("#cancel-order").click()
+                assert page.locator(".server-card").first.get_attribute("data-server") == "storm"
+                page.locator("#reorder").click()
+                page.locator('[data-move="mist"][data-step="-1"]').click()
+                page.locator("#save-order").click()
+                page.reload()
+                page.wait_for_selector("scottibyte-incus-panel .server-card")
+                assert page.locator(".server-card").first.get_attribute("data-server") == "mist"
+                assert (
+                    page.locator("a.add-server").get_attribute("href")
+                    == "/config/integrations/dashboard/add?domain=scottibyte_incus"
+                )
                 assert "2 / 3" in page.locator("#summary").inner_text()
                 page.screenshot(path=str(screenshots / "overview.png"), full_page=True)
                 page.locator("#search").fill("assist")
@@ -80,22 +97,22 @@ def main():
                     servers[0].instances[0].macs = Array.from({length:40}, (_,i) => '02:42:ac:11:00:' + i.toString(16).padStart(2,'0'));
                     await document.querySelector('scottibyte-incus-panel').refresh();
                 }""")
-                table = page.locator('.table-scroll')
-                assert table.evaluate('(e) => e.scrollWidth <= e.clientWidth + 1')
-                assert page.locator('tbody .instance-row').first.bounding_box()['height'] < 140
-                action_box = page.locator('tbody .row-actions').first.bounding_box()
-                assert action_box['x'] + action_box['width'] <= 1220
+                table = page.locator(".table-scroll")
+                assert table.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1")
+                assert page.locator("tbody .instance-row").first.bounding_box()["height"] < 140
+                action_box = page.locator("tbody .row-actions").first.bounding_box()
+                assert action_box["x"] + action_box["width"] <= 1220
                 page.locator('[data-details="0"]').click()
-                assert page.locator('.instance-details').count() == 1
-                assert '02:42:ac:11:00:27' in page.locator('.instance-details').inner_text()
-                assert '2601:2c4:4000:c70:1266:6aff:fe63:dfa5' in page.locator('.instance-details').inner_text()
+                assert page.locator(".instance-details").count() == 1
+                assert "02:42:ac:11:00:27" in page.locator(".instance-details").inner_text()
+                assert "2601:2c4:4000:c70:1266:6aff:fe63:dfa5" in page.locator(".instance-details").inner_text()
                 page.evaluate("document.querySelector('scottibyte-incus-panel').render()")
-                assert page.locator('.instance-details').count() == 1
-                page.screenshot(path=str(screenshots / 'network-details.png'), full_page=True)
+                assert page.locator(".instance-details").count() == 1
+                page.screenshot(path=str(screenshots / "network-details.png"), full_page=True)
                 page.locator('[data-details="0"]').click()
                 page.set_viewport_size({"width": 760, "height": 1000})
-                action_box = page.locator('tbody .row-actions').first.bounding_box()
-                assert action_box['x'] + action_box['width'] <= 760
+                action_box = page.locator("tbody .row-actions").first.bounding_box()
+                assert action_box["x"] + action_box["width"] <= 760
                 page.set_viewport_size({"width": 1220, "height": 1000})
                 page.locator("tr").filter(has=page.locator("td strong", has_text="Frigate")).locator(
                     '[data-action="start"]'

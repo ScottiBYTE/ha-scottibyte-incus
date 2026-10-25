@@ -53,6 +53,30 @@ async def inventory(hass, connection, msg):
     connection.send_result(msg["id"], [c.public_data() for c in hass.data[DOMAIN]["coordinators"].values()])
 
 
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/dashboard"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def dashboard(hass, connection, msg):
+    connection.send_result(msg["id"], hass.data[DOMAIN]["dashboard"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/server_order", vol.Required("order"): [str]})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def server_order(hass, connection, msg):
+    data = hass.data[DOMAIN]
+    known = {entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)}
+    order = msg["order"]
+    if len(order) != len(set(order)) or any(value not in known for value in order):
+        connection.send_error(msg["id"], "invalid_order", "Server list changed; refresh and try again.")
+        return
+    async with data["dashboard_lock"]:
+        updated = {"server_order": order}
+        await data["dashboard_store"].async_save(updated)
+        data["dashboard"] = updated
+    connection.send_result(msg["id"], updated)
+
+
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/refresh"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -225,5 +249,5 @@ async def close_terminals(hass, server=None):
 
 @callback
 def register(hass):
-    for handler in (inventory, refresh, action, terminal_open, terminal_input):
+    for handler in (inventory, dashboard, server_order, refresh, action, terminal_open, terminal_input):
         websocket_api.async_register_command(hass, handler)

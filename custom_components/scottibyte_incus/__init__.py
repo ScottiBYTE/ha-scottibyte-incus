@@ -8,6 +8,7 @@ from homeassistant.components import panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.storage import Store
 
 from . import websocket
 from .api import IncusClient, make_ssl_context
@@ -20,6 +21,10 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 async def async_setup(hass, config):
     hass.data[DOMAIN] = {"coordinators": {}, "terminals": {}, "locks": {}}
+    dashboard_store = Store(hass, 1, f"{DOMAIN}.dashboard")
+    hass.data[DOMAIN]["dashboard_store"] = dashboard_store
+    hass.data[DOMAIN]["dashboard"] = await dashboard_store.async_load() or {"server_order": []}
+    hass.data[DOMAIN]["dashboard_lock"] = asyncio.Lock()
     websocket.register(hass)
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), cache_headers=False)]
@@ -36,6 +41,7 @@ async def async_setup(hass, config):
     )
 
     async def shutdown(event):
+        await asyncio.gather(*(c.dns.close() for c in hass.data[DOMAIN]["coordinators"].values()))
         await websocket.close_terminals(hass)
         await asyncio.gather(*(c.client.close() for c in hass.data[DOMAIN]["coordinators"].values()))
 
@@ -82,6 +88,7 @@ async def async_unload_entry(hass, entry):
         return False
     await websocket.close_terminals(hass, entry.entry_id)
     coordinator = hass.data[DOMAIN]["coordinators"].pop(entry.entry_id)
+    await coordinator.dns.close()
     await coordinator.client.close()
     if not hass.data[DOMAIN]["coordinators"]:
         # Keep the panel registered: adding a new server needs no restart.

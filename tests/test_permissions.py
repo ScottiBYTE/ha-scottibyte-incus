@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,7 +9,7 @@ from custom_components.scottibyte_incus import websocket as ws
 from custom_components.scottibyte_incus.const import DOMAIN
 
 
-@pytest.mark.parametrize("handler", [ws.inventory, ws.refresh, ws.action, ws.terminal_open, ws.terminal_input])
+@pytest.mark.parametrize("handler", [ws.inventory, ws.dashboard, ws.server_order, ws.refresh, ws.action, ws.terminal_open, ws.terminal_input])
 def test_non_admin_cannot_call_any_backend_endpoint(handler):
     connection = SimpleNamespace(user=SimpleNamespace(is_admin=False))
     with pytest.raises(Unauthorized):
@@ -53,3 +54,19 @@ async def test_unknown_instance_and_offline_server_cannot_be_managed():
     coordinator.snapshot["online"] = True
     with pytest.raises(Exception, match="not in the configured inventory"):
         ws.coordinator_for(hass, {"server": "server", "name": "unknown", "project": "default"})
+
+
+@pytest.mark.asyncio
+async def test_server_order_saved_and_invalid_order_rejected():
+    store = SimpleNamespace(async_save=AsyncMock())
+    data = {"dashboard_store": store, "dashboard": {}, "dashboard_lock": asyncio.Lock()}
+    hass = SimpleNamespace(data={DOMAIN: data}, config_entries=SimpleNamespace(
+        async_entries=lambda domain: [SimpleNamespace(entry_id="storm"), SimpleNamespace(entry_id="mist")]))
+    connection = Connection()
+    await call_original(ws.server_order, hass, connection, {"id": 1, "order": ["mist", "storm"]})
+    assert data["dashboard"]["server_order"] == ["mist", "storm"]
+    store.async_save.assert_awaited_once_with({"server_order": ["mist", "storm"]})
+    for order in (["unknown"], ["storm", "storm"]):
+        await call_original(ws.server_order, hass, connection, {"id": 2, "order": order})
+    assert len(connection.errors) == 2
+    assert store.async_save.await_count == 1

@@ -8,6 +8,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN
+from .dns import ReverseDNS
 from .models import counts, normalize_instance, utc_now
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class IncusCoordinator(DataUpdateCoordinator):
             "version": "",
             "clustered": False,
         }
+        self.dns = ReverseDNS(hass)
         self._sample_at = None
         self._last_saved = 0
 
@@ -50,6 +52,7 @@ class IncusCoordinator(DataUpdateCoordinator):
                 normalize_instance(item, project, previous.get((project, item["name"])), elapsed)
                 for project, item in raw
             ]
+            self.dns.apply(instances)
             env = info.get("environment", {})
             self.snapshot = {
                 "online": True,
