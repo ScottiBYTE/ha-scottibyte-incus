@@ -72,6 +72,30 @@ def main():
                 assert page.locator("tbody tr").count() == 2
                 page.locator('[data-drill="0"]').click()
                 assert page.locator("tbody tr").count() == 3
+                # Reproduce narrow HA content with long IPv6 and many virtual NICs.
+                page.set_viewport_size({"width": 1220, "height": 1000})
+                page.evaluate("""async () => {
+                    servers[0].instances[0].ips.push('172.17.0.1', '172.18.0.1', '2601:2c4:4000:c70:1266:6aff:fe63:dfa5');
+                    servers[0].instances[0].macs = Array.from({length:40}, (_,i) => '02:42:ac:11:00:' + i.toString(16).padStart(2,'0'));
+                    await document.querySelector('scottibyte-incus-panel').refresh();
+                }""")
+                table = page.locator('.table-scroll')
+                assert table.evaluate('(e) => e.scrollWidth <= e.clientWidth + 1')
+                assert page.locator('tbody .instance-row').first.bounding_box()['height'] < 140
+                action_box = page.locator('tbody .row-actions').first.bounding_box()
+                assert action_box['x'] + action_box['width'] <= 1220
+                page.locator('[data-details="0"]').click()
+                assert page.locator('.instance-details').count() == 1
+                assert '02:42:ac:11:00:27' in page.locator('.instance-details').inner_text()
+                assert '2601:2c4:4000:c70:1266:6aff:fe63:dfa5' in page.locator('.instance-details').inner_text()
+                page.evaluate("document.querySelector('scottibyte-incus-panel').render()")
+                assert page.locator('.instance-details').count() == 1
+                page.screenshot(path=str(screenshots / 'network-details.png'), full_page=True)
+                page.locator('[data-details="0"]').click()
+                page.set_viewport_size({"width": 760, "height": 1000})
+                action_box = page.locator('tbody .row-actions').first.bounding_box()
+                assert action_box['x'] + action_box['width'] <= 760
+                page.set_viewport_size({"width": 1220, "height": 1000})
                 page.locator("tr").filter(has=page.locator("td strong", has_text="Frigate")).locator(
                     '[data-action="start"]'
                 ).click()
