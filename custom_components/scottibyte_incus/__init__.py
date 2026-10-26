@@ -10,11 +10,12 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
+from homeassistant.loader import async_get_integration
 
 from . import websocket
 from .api import IncusClient, certificate_fingerprint, make_ssl_context
 from .bootstrap import api_url
-from .const import DOMAIN, PANEL_URL, PLATFORMS, STATIC_URL, VERSION
+from .const import DOMAIN, PANEL_URL, PLATFORMS, STATIC_URL
 from .coordinator import IncusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,13 +33,14 @@ async def async_setup(hass, config):
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), cache_headers=False)]
     )
+    integration = await async_get_integration(hass, DOMAIN)
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL,
         webcomponent_name="scottibyte-incus-panel",
         sidebar_title="Incus",
         sidebar_icon="mdi:server-network",
-        module_url=f"{STATIC_URL}/panel.js?v={VERSION}",
+        module_url=f"{STATIC_URL}/panel.js?v={integration.version}",
         require_admin=True,
         embed_iframe=False,
     )

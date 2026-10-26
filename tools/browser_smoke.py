@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
 body{margin:0;--primary-background-color:#0d121c;--card-background-color:#131c2b;--primary-text-color:#e5eaf3;--secondary-text-color:#94a3b8;--divider-color:#293446}
 </style></head><body><script type="module">
-import '/scottibyte_incus_static/panel.js';
+import '/scottibyte_incus_static/panel.js?v=9.8.7';
 const make=(name,status,type='container',ip='172.16.1.243')=>({name,status,type,project:'default',location:'',ips:status==='Running'?[ip]:[],macs:['00:16:3e:ab:01:02'],dns:name==='Assist'?'assist':'',cpu_percent:status==='Running'?762:null,cpu_host_percent:status==='Running'?23.8:null,cpu_cores_used:status==='Running'?7.62:null,host_cpu_count:32,primary_ip:status==='Running'?ip:null,memory_bytes:status==='Running'?1048576000:null,memory_limit:2147483648,disk_bytes:2147483648,disk_limit:21474836480});
 window.servers=[
 {id:'storm',name:'vmsstorm',host:'172.16.1.186',version:'7.5.1',online:true,instances:[make('Assist','Running'),make('Frigate','Stopped'),make('win11','Running','virtual-machine','172.16.1.132')]},
@@ -77,6 +77,9 @@ def main():
                 page.wait_for_selector("scottibyte-incus-panel .server-card")
                 assert page.locator(".server-card").count() == 3
                 assert page.locator(".stat").count() == 6
+                assert page.locator(".app-version").inner_text() == "v9.8.7"
+                assert page.locator(".donate-link").get_attribute("href") == "https://www.paypal.com/paypalme/ScottiBYTE"
+                assert page.locator(".donate-link").get_attribute("target") == "_blank"
                 page.locator("#reorder").click()
                 handle = page.locator('[data-card="storm"] .drag-handle')
                 target = page.locator('[data-card="rain"]')
@@ -203,6 +206,8 @@ def main():
                 page.screenshot(path=str(screenshots / "mobile.png"), full_page=True)
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 assert page.locator("a.add-server").is_visible()
+                assert page.locator(".app-version").is_visible()
+                assert page.locator(".donate-link").is_visible()
                 assert not errors, errors
                 browser.close()
                 print(

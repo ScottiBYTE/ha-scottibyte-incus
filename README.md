@@ -2,7 +2,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 0.1.8 — preparing for v1.0.** Live monitoring, multiple-server enrollment, HACS custom-repository installation, reverse DNS, and drag-and-drop reordering have been exercised on Scott's installation. Additional live acceptance testing is required before declaring a stable release. This repository is not yet in HACS's default catalog.
+**Version 1.0.0 — first stable release.** Current features have been tested by Scott in his live Home Assistant/Incus environment, including the Pixel 7 Companion app. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
 
 ## Features
 
@@ -22,7 +22,7 @@ A HACS-installable custom integration that brings multiple Incus servers into on
 ## Requirements
 
 - Home Assistant **2026.10 or newer**. The tested runtime is 2026.10.4.
-- An initialized Incus server. Version 7.5.1 is the initial live-test target; protocol compatibility with other versions is not yet certified.
+- An initialized Incus server. Live testing used Incus 7.5.1; compatibility with other Incus versions has not been separately certified.
 - Home Assistant must reach the server over SSH during automatic setup and over HTTPS for normal use (default ports 22 and 8443).
 - An SSH account with Incus administrative access, either directly or through sudo. Password or a pasted private key is supported. SSH setups requiring interactive MFA are not supported by this initial build.
 - A Linux system container with `/bin/sh` for terminal access. Bash is used when present.
@@ -40,7 +40,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). The first tagged prerelease is **v0.1.5**. In HACS, enable **Show beta versions** when necessary to select a prerelease. Confirm the downloaded version after installation. Tracking `main` remains a testing workflow.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.0.0** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
@@ -138,3 +138,7 @@ Renaming an entry is supported through HA’s native integration page. Use **Rec
 See [DEVELOPMENT.md](DEVELOPMENT.md) for staging in an Incus container, running checks, and pushing to GitHub. See [VALIDATION.md](VALIDATION.md) for the test scope and live acceptance checklist.
 
 Project code is MIT licensed. Bundled xterm.js and its fit addon retain their upstream MIT license files in `frontend/vendor/`.
+
+## Support ScottiBYTE
+
+If you find this integration useful, you can [donate through PayPal](https://www.paypal.com/paypalme/ScottiBYTE). The dashboard header also includes a Donate button. Its visible version comes from the installed integration manifest and identifies the frontend loaded in your browser or Companion app.
