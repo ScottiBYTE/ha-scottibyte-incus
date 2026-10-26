@@ -1,6 +1,7 @@
 """UI setup, with a separate SSH identity confirmation before credential use."""
 
 import shutil
+import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -72,7 +73,10 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return make_ssl_context((directory / "server.crt").read_text(), directory / "client.crt", directory / "client.key")
 
                 client = IncusClient(api_url(host, user_input["api_port"]), await self.hass.async_add_executor_job(context))
-                await client.inventory(projects)
+                info, _ = await client.inventory(projects)
+                expected_member = entry.data.get("cluster_member")
+                if expected_member and info.get("environment", {}).get("server_name") != expected_member:
+                    raise ValueError("Use trust renewal to select a different member")
                 return self.async_update_reload_and_abort(entry, data_updates={
                     "host": host, "api_port": user_input["api_port"], "projects": projects})
             except Exception:
@@ -86,6 +90,11 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required("projects", default=",".join(entry.data["projects"])): str,
         }), errors=errors)
 
+    def _check_endpoint(self, host, port):
+        for entry in self._async_current_entries():
+            if entry is not getattr(self, "_editing_entry", None) and entry.data["host"].casefold() == host.casefold() and entry.data["api_port"] == port:
+                raise ValueError("This endpoint is already configured")
+
     async def async_step_user(self, user_input=None):
         return self.async_show_menu(step_id="user", menu_options=["ssh", "token"])
 
@@ -94,8 +103,9 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 user_input["host"] = validate_host(user_input["host"])
+                self._check_endpoint(user_input["host"], user_input["api_port"])
                 parse_projects(user_input["projects"])
-                user_input["_known_fingerprints"] = self._known_fingerprints()
+                user_input["_known_fingerprints"] = set()
                 self._settings = user_input
                 self._host_key = await discover_server(user_input["host"], user_input["ssh_port"])
                 return await self.async_step_confirm_host()
@@ -157,6 +167,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 user_input["host"] = validate_host(user_input["host"])
+                self._check_endpoint(user_input["host"], user_input["api_port"])
                 parse_projects(user_input["projects"])
                 cert, key = await self.hass.async_add_executor_job(generate_certificate)
                 pem, info = await enroll_token(
@@ -165,7 +176,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input["token"],
                     cert,
                     key,
-                    self._known_fingerprints(),
+                    (),
                 )
                 return await self._finish(user_input, pem, info, cert, key)
             except Exception:
@@ -184,17 +195,45 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def _discard_enrollment(self, settings, pem, cert, key):
+        # A duplicate reached through a DNS alias may already have enrolled.
+        # Retire only the newly generated identity, never another entry's trust.
+        with tempfile.TemporaryDirectory(prefix="ha-incus-duplicate-") as tmp:
+            directory = Path(tmp)
+            await self.hass.async_add_executor_job(write_credentials, directory / "client.crt", directory / "client.key", cert, key)
+            context = await self.hass.async_add_executor_job(make_ssl_context, pem, directory / "client.crt", directory / "client.key")
+            client = IncusClient(api_url(settings["host"], settings["api_port"]), context)
+            fingerprint = certificate_fingerprint(cert)
+            try:
+                await client.request("DELETE", f"/1.0/certificates/{fingerprint}", timeout=10)
+            except Exception:
+                persistent_notification.async_create(self.hass,
+                    f"Duplicate setup was rejected, but the new trust identity may remain. Remove only certificate {fingerprint} on {settings['host']}.",
+                    title="Incus duplicate trust cleanup")
+            finally:
+                await client.close()
+
     def _known_fingerprints(self):
         return {e.data.get("fingerprint") for e in self._async_current_entries() if e is not getattr(self, "_editing_entry", None)}
 
     async def _finish(self, settings, pem, info, cert, key):
-        # Cluster members share a certificate: adding the same cluster twice is rejected.
-        unique_id = certificate_fingerprint(pem)
+        fingerprint = certificate_fingerprint(pem)
+        env = info.get("environment", {})
+        member = str(env.get("server_name") or "").strip() if env.get("server_clustered") else ""
+        if env.get("server_clustered") and not member:
+            raise ValueError("Cluster member identity was not reported")
+        unique_id = f"{fingerprint}:{member}" if member else fingerprint
+        entry = getattr(self, "_editing_entry", None)
+        for other in self._async_current_entries():
+            if other is entry or other.data.get("fingerprint") != fingerprint:
+                continue
+            # Also recognizes entries created before member-specific identities.
+            if not member or other.data.get("cluster_member", other.data.get("server_name")) == member:
+                await self._discard_enrollment(settings, pem, cert, key)
+                return self.async_abort(reason="already_configured")
         await self.async_set_unique_id(unique_id)
-        if not getattr(self, "_editing_entry", None):
+        if entry is None:
             self._abort_if_unique_id_configured()
-        elif unique_id in self._known_fingerprints():
-            return self.async_abort(reason="already_configured")
         projects = parse_projects(settings["projects"])
         detected_name = str(info.get("environment", {}).get("server_name") or "").strip()
         requested_name = str(settings.get("name") or "").strip()
@@ -214,7 +253,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.hass.async_add_executor_job(save)
         data = {
             "host": settings["host"], "api_port": settings["api_port"], "projects": projects,
-            "credential_id": ident, "server_name": detected_name or settings["host"], "fingerprint": unique_id,
+            "credential_id": ident, "server_name": detected_name or settings["host"], "fingerprint": fingerprint, "cluster_member": member,
         }
         entry = getattr(self, "_editing_entry", None)
         if entry is None:

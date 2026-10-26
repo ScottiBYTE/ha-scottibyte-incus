@@ -208,6 +208,16 @@ def main():
                 assert page.locator("a.add-server").is_visible()
                 assert page.locator(".app-version").is_visible()
                 assert page.locator(".donate-link").is_visible()
+                page.locator("#back").click() if page.locator("#back").is_visible() else None
+                page.evaluate("""async()=>{Object.assign(servers[0],{name:'VMSCloud-Incus',clustered:true,cluster_id:'abc12345abcdef',cluster_member:'vmscloud-incus',cluster_members:[{name:'vmscloud-incus'},{name:'vmsfog-incus'},{name:'incus-member'}],active_endpoint:'https://vmsfog-incus.very-long-local-domain.example:8443'});await document.querySelector('scottibyte-incus-panel').refresh();}""")
+                for width in (360, 390, 480, 1600):
+                    page.set_viewport_size({"width": width, "height": 900})
+                    label = page.locator(".cluster-member")
+                    assert label.is_visible()
+                    assert "vmscloud-incus" in label.inner_text()
+                    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                    assert label.evaluate("el => el.scrollWidth <= el.clientWidth")
+                    page.screenshot(path=str(screenshots / f"cluster-{width}.png"), full_page=True)
                 assert not errors, errors
                 browser.close()
                 print(

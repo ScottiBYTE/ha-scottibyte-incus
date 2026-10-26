@@ -44,6 +44,7 @@ async def test_address_projects_validated_before_update(hass, tmp_path):
         assert entry.data['host'] == '192.168.1.10'
         reload.assert_not_awaited()
         client.inventory.side_effect = None
+        client.inventory.return_value = ({"environment": {}}, [])
         flow = await hass.config_entries.flow.async_configure(flow['flow_id'], {'host':'192.168.1.20', 'api_port':8443, 'projects':'lab'})
         await hass.async_block_till_done()
         assert flow['type'] == 'abort' and flow['reason'] == 'reconfigure_successful'

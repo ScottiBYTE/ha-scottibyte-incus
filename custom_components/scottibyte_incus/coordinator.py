@@ -7,6 +7,7 @@ from datetime import timedelta
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .api import IncusError
 from .const import DOMAIN
 from .dns import ReverseDNS
 from .models import counts, normalize_instance, utc_now
@@ -41,10 +42,26 @@ class IncusCoordinator(DataUpdateCoordinator):
         saved = await self.store.async_load()
         if saved:
             self.snapshot = {**saved, "online": False}
+            if saved.get("clustered"):
+                member = self.entry.data.get("cluster_member") or self.entry.data.get("server_name")
+                self.snapshot["instances"] = [i for i in saved.get("instances", []) if i.get("location") == member]
+                self.snapshot["counts"] = counts(self.snapshot["instances"])
 
     async def _async_update_data(self):
         try:
+            if hasattr(self.client, "set_endpoints"):
+                self.client.set_endpoints(self.snapshot.get("cluster_members", []))
             info, raw = await self.client.inventory(self.entry.data["projects"])
+            env = info.get("environment", {})
+            member = self.entry.data.get("cluster_member") or self.entry.data.get("server_name") or env.get("server_name")
+            clustered = env.get("server_clustered", False)
+            if clustered:
+                if not member:
+                    raise IncusError("Cluster member identity is unavailable")
+                member_info = next((m for m in info.get("cluster_members", []) if m.get("server_name") == member), None)
+                if member_info and str(member_info.get("status", "")).lower() != "online":
+                    raise IncusError("Cluster member is offline")
+                raw = [(project, item) for project, item in raw if item.get("location") == member]
             now = time.monotonic()
             elapsed = now - self._sample_at if self._sample_at is not None else 0
             previous = {(i["project"], i["name"]): i for i in self.snapshot["instances"]} if self._sample_at else {}
@@ -62,7 +79,11 @@ class IncusCoordinator(DataUpdateCoordinator):
                 "last_success": utc_now(),
                 "version": env.get("server_version", ""),
                 "clustered": env.get("server_clustered", False),
-                "server_name": env.get("server_name", self.entry.title),
+                "server_name": member if clustered else env.get("server_name", self.entry.title),
+                "active_endpoint": getattr(self.client, "url", ""),
+                "cluster_id": self.entry.data.get("fingerprint", "") if clustered else "",
+                "cluster_member": member if clustered else "",
+                "cluster_members": [{"name": m.get("server_name", ""), "url": m.get("url", ""), "status": m.get("status", "Unknown"), "roles": m.get("roles", [])} for m in info.get("cluster_members", [])],
             }
             self._sample_at = now
             # Checkpoint at most every two minutes, including during steady polling.

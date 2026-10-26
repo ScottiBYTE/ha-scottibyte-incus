@@ -2,7 +2,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.0.0 — first stable release.** Current features have been tested by Scott in his live Home Assistant/Incus environment, including the Pixel 7 Companion app. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
+**Version 1.1.0 — cluster member support.** Current features have been tested by Scott in his live Home Assistant/Incus environment, including the Pixel 7 Companion app. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
 
 ## Features
 
@@ -40,7 +40,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.0.0** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.0** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
@@ -142,3 +142,11 @@ Project code is MIT licensed. Bundled xterm.js and its fit addon retain their up
 ## Support ScottiBYTE
 
 If you find this integration useful, you can [donate through PayPal](https://www.paypal.com/paypalme/ScottiBYTE). The dashboard header also includes a Donate button. Its visible version comes from the installed integration manifest and identifies the frontend loaded in your browser or Companion app.
+
+## Cluster member cards (v1.1.0)
+
+Add each cluster member through Add server. Members share a pinned server certificate, but each configured member gets its own client certificate, entry and card. Existing entries remain in place. Cluster cards show member name, cluster size and active API endpoint. Card inventory and counts cover only that member; add all members for a complete cluster summary. Standalone server behavior is unchanged.
+
+Endpoints are discovered through the authenticated cluster membership API and checkpointed with inventory. On a later refresh, an unreachable API endpoint can be replaced by another discovered member using the same pinned TLS context. Discovery addresses must resolve and be reachable from HA. No failover is possible before the first successful discovery. An actually offline member remains unavailable; other online member cards remain usable. Cluster quorum and Incus availability are still required. Existing terminals are not resumed after a connection failure, and action submissions are never automatically replayed.
+
+Member card ordering and HA entry IDs survive this update. Instances migrated between members may leave old HA registry entities that require manual cleanup. Removing a member entry revokes only its own client identity. A failed remote revocation still requires the manual cleanup described by the integration notification.

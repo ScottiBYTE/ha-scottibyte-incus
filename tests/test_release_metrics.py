@@ -34,10 +34,14 @@ def test_cpu_host_share_and_preferred_guest_ip():
 async def test_cluster_member_capacity_and_failure_isolation():
     client = IncusClient.__new__(IncusClient)
     client._cpu_cache = {}
+    client.url = client.primary_url = "https://member-a:8443"
+    client.endpoints = [client.url]
 
     async def metadata(path, **kwargs):
         if path == '/1.0':
             return {'auth': 'trusted', 'environment': {'server_clustered': True}}
+        if path == '/1.0/cluster/members':
+            return []
         if path == '/1.0/instances':
             return [raw_instance('member-a'), {**raw_instance('member-b'), 'name': 'SecondGuest'}]
         if path == '/1.0/resources':
@@ -52,4 +56,4 @@ async def test_cluster_member_capacity_and_failure_isolation():
     assert len(rows) == 2
     count = client.metadata.await_count
     await client.inventory(['default'])
-    assert client.metadata.await_count == count + 2  # resources are cached, including failures
+    assert client.metadata.await_count == count + 3  # resources are cached, including failures

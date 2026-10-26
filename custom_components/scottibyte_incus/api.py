@@ -6,7 +6,7 @@ import re
 import ssl
 import time
 from contextlib import suppress
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import aiohttp
 
@@ -37,6 +37,8 @@ class IncusClient:
     def __init__(self, url, context):
         self._cpu_cache = {}
         self.url = url.rstrip("/")
+        self.primary_url = self.url
+        self.endpoints = [self.url]
         self.session = aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(ssl=context),
             timeout=aiohttp.ClientTimeout(total=25),
@@ -62,12 +64,43 @@ class IncusClient:
     async def metadata(self, path, **kwargs):
         return (await self.request("GET", path, **kwargs))["metadata"]
 
+    def set_endpoints(self, members):
+        urls = [self.primary_url]
+        for member in members:
+            value = member.get("url", "")
+            parsed = urlsplit(value)
+            if parsed.scheme == "https" and parsed.hostname and not parsed.username and not parsed.password and parsed.path in ("", "/") and not parsed.query and not parsed.fragment:
+                urls.append(value.rstrip("/"))
+        self.endpoints = list(dict.fromkeys(urls))
+
+    async def select_endpoint(self):
+        # Retry only the read-only identity probe, never an action submission.
+        # All endpoints use the original pinned TLS context and client identity.
+        previous = self.url
+        for endpoint in dict.fromkeys([self.url, *self.endpoints]):
+            self.url = endpoint
+            try:
+                info = await self.metadata("/1.0", timeout=4)
+                if info.get("auth") != "trusted":
+                    raise IncusError("Home Assistant certificate is not trusted")
+                return info
+            except (aiohttp.ClientError, TimeoutError, OSError):
+                continue
+            except BaseException:
+                self.url = previous
+                raise
+        self.url = previous
+        raise IncusError("No trusted cluster endpoint is reachable")
+
     async def inventory(self, projects):
-        info = await self.metadata("/1.0")
+        info = await self.select_endpoint()
         if info.get("auth") != "trusted":
             raise IncusError("Home Assistant certificate is not trusted")
         if projects == ["*"]:
             projects = [p["name"] for p in await self.metadata("/1.0/projects", params={"recursion": 1})]
+        if info.get("environment", {}).get("server_clustered"):
+            info["cluster_members"] = await self.metadata("/1.0/cluster/members", params={"recursion": 1})
+            self.set_endpoints(info["cluster_members"])
         rows = []
         # Bounded parallelism across projects, no per-instance request fan-out.
         semaphore = asyncio.Semaphore(3)
