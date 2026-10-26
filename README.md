@@ -2,7 +2,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 0.1.6 — preparing for v1.0.** Live monitoring, multiple-server enrollment, HACS custom-repository installation, reverse DNS, and drag-and-drop reordering have been exercised on Scott's installation. Additional live acceptance testing is required before declaring a stable release. This repository is not yet in HACS's default catalog.
+**Version 0.1.8 — preparing for v1.0.** Live monitoring, multiple-server enrollment, HACS custom-repository installation, reverse DNS, and drag-and-drop reordering have been exercised on Scott's installation. Additional live acceptance testing is required before declaring a stable release. This repository is not yet in HACS's default catalog.
 
 ## Features
 
@@ -15,7 +15,7 @@ A HACS-installable custom integration that brings multiple Incus servers into on
 - Embedded root terminals for running Linux system containers, using Incus interactive execution. No SSH server is needed inside containers.
 - Administrator-only panel and backend management/terminal API.
 - Native Home Assistant devices and entities for automation and history.
-- Last-known inventory retained and clearly marked stale when a server is unreachable.
+- Offline server cards show the configured address and last-known counts; instance listings are unavailable until the server reconnects.
 - Projects and clusters supported. Enroll a cluster only once; each instance's cluster location appears in the table.
 - Bundled terminal assets: no CDN connection is needed at runtime.
 
@@ -89,7 +89,7 @@ The top row shows combined inventory totals; server cards sit below it. Click a 
 - Action requests recheck live instance state and serialize operations per instance. Success is displayed only after Incus reports the operation completed.
 - A browser disconnection does not cancel an already requested start/stop operation. Refresh to see the resulting state.
 - Server inventory polls every 30 seconds by default. Change it under the integration's options (10–300 seconds). The panel rereads HA's cached inventory every five seconds; it does not poll Incus every five seconds.
-- A server failure preserves the previous instance states and displays **Offline · stale**. Summary totals explicitly note when they include stale data. The successful update time is shown in the server view. It is not equivalent to the panel's latest view-refresh time.
+- An unreachable server shows an offline, non-clickable card with its configured IP address or hostname. Cached instances are excluded from server drill-down and global search; a server that goes offline while open returns the view to the cards. HA retains its internal checkpoint for recovery and marks summary totals that include last-known counts. Offline does not distinguish a powered-off host from network/API failures.
 
 ## Entities
 

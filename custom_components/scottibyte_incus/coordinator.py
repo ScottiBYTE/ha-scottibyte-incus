@@ -77,4 +77,10 @@ class IncusCoordinator(DataUpdateCoordinator):
         return self.snapshot
 
     def public_data(self):
-        return {"id": self.entry.entry_id, "name": self.entry.title, **self.snapshot}
+        return {
+            **self.snapshot,
+            "id": self.entry.entry_id,
+            "name": self.entry.title,
+            "host": self.entry.data["host"],
+            "instances": self.snapshot["instances"] if self.snapshot["online"] else [],
+        }

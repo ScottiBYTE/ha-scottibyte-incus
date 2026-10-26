@@ -23,3 +23,15 @@ async def test_failure_retains_inventory_but_marks_it_stale():
     assert result["instances"] == [item] and result["instances"][0]["status"] == "Running"
     assert result["last_success"] == snapshot["last_success"]
     assert obj._sample_at is None
+
+
+def test_offline_public_data_omits_instances_but_retains_internal_snapshot():
+    item = {"name": "Assist", "project": "default"}
+    snapshot = {"online": False, "instances": [item], "counts": {"total": 1}}
+    obj = SimpleNamespace(entry=SimpleNamespace(entry_id="storm", title="vmsstorm", data={"host": "172.16.1.186"}), snapshot=snapshot)
+    data = IncusCoordinator.public_data(obj)
+    assert data["instances"] == []
+    assert data["host"] == "172.16.1.186"
+    assert snapshot["instances"] == [item]
+    snapshot["online"] = True
+    assert IncusCoordinator.public_data(obj)["instances"] == [item]

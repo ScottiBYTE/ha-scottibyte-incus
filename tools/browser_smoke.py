@@ -21,9 +21,9 @@ body{margin:0;--primary-background-color:#0d121c;--card-background-color:#131c2b
 import '/scottibyte_incus_static/panel.js';
 const make=(name,status,type='container',ip='172.16.1.243')=>({name,status,type,project:'default',location:'',ips:status==='Running'?[ip]:[],macs:['00:16:3e:ab:01:02'],dns:name==='Assist'?'assist':'',cpu_percent:status==='Running'?762:null,cpu_host_percent:status==='Running'?23.8:null,cpu_cores_used:status==='Running'?7.62:null,host_cpu_count:32,primary_ip:status==='Running'?ip:null,memory_bytes:status==='Running'?1048576000:null,memory_limit:2147483648,disk_bytes:2147483648,disk_limit:21474836480});
 window.servers=[
-{id:'storm',name:'vmsstorm',version:'7.5.1',online:true,instances:[make('Assist','Running'),make('Frigate','Stopped'),make('win11','Running','virtual-machine','172.16.1.132')]},
-{id:'mist',name:'vmsmist',version:'7.5.1',online:true,instances:[make('Authentik','Running','container','172.16.1.228'),make('Assist','Running','container','172.16.1.44')]},
-{id:'rain',name:'vmsrain',version:'7.5.1',online:false,instances:[make('Paperless','Running','container','172.16.1.50')]}
+{id:'storm',name:'vmsstorm',host:'172.16.1.186',version:'7.5.1',online:true,instances:[make('Assist','Running'),make('Frigate','Stopped'),make('win11','Running','virtual-machine','172.16.1.132')]},
+{id:'mist',name:'vmsmist',host:'172.16.1.10',version:'7.5.1',online:true,instances:[make('Authentik','Running','container','172.16.1.228'),make('Assist','Running','container','172.16.1.44')]},
+{id:'rain',name:'vmsrain',host:'2001:db8:1234:5678:1234:5678:1234:5678',version:'7.5.1',online:false,instances:[make('Paperless','Running','container','172.16.1.50')]}
 ];
 function recalc(){for(const s of servers){s.last_success=new Date().toISOString();s.counts={total:s.instances.length,running:s.instances.filter(i=>i.status==='Running').length,stopped:s.instances.filter(i=>i.status==='Stopped').length,containers:s.instances.filter(i=>i.type==='container').length,vms:s.instances.filter(i=>i.type==='virtual-machine').length};}}
 recalc();window.inputs=[];window.unsubscribed=false;
@@ -185,13 +185,20 @@ def main():
                 page.locator("#terminalclose").click()
                 assert page.evaluate("window.unsubscribed")
                 page.locator("#back").click()
-                page.locator('[data-server="rain"]').click()
-                assert page.locator("tbody .stale").count() == 1
-                assert page.locator("tbody button[data-action]:enabled").count() == 0
+                assert page.locator('[data-server="rain"]').is_disabled()
+                assert "172.16.1.186" in page.locator('[data-server="storm"]').inner_text()
+                page.locator("#search").fill("Paperless")
+                assert page.locator("tbody tr").count() == 0
+                page.locator("#search").fill("")
+                page.locator('[data-server="storm"]').click()
+                page.evaluate("async()=>{servers[0].online=false;await document.querySelector('scottibyte-incus-panel').refresh();}")
+                assert page.locator("#inventory").is_hidden()
+                assert "is offline" in page.locator("#message").inner_text()
+                page.evaluate("async()=>{servers[0].online=true;await document.querySelector('scottibyte-incus-panel').refresh();}")
+                assert page.locator('[data-server="storm"]').is_enabled()
                 page.locator("#search").fill("<img src=x onerror=alert(1)>")
                 assert page.locator("tbody tr").count() == 0
                 page.locator("#search").fill("")
-                page.locator("#back").click()
                 page.set_viewport_size({"width": 390, "height": 844})
                 page.screenshot(path=str(screenshots / "mobile.png"), full_page=True)
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
