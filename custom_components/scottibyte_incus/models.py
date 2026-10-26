@@ -63,7 +63,13 @@ def normalize_instance(raw, project, previous=None, elapsed=0, host_cpus=None):
     root = next((d for d in devices.values() if d.get("type") == "disk" and d.get("path") == "/"), {})
     disks = state.get("disk") or {}
     root_state = disks.get("root") or next(iter(disks.values()), {})
+    guest_os = str(config.get("image.os") or config.get("os") or "").strip().lower()
+    terminal_supported = raw.get("type", "container") == "container" or (
+        raw.get("type") == "virtual-machine" and not any(os in guest_os for os in ("windows", "freebsd", "openbsd", "netbsd", "darwin", "macos"))
+    )
     return {
+        "guest_os": guest_os,
+        "terminal_supported": terminal_supported,
         "name": raw["name"],
         "project": project,
         "type": raw.get("type", "container"),

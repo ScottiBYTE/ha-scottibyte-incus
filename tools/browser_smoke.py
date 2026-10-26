@@ -187,6 +187,21 @@ def main():
                 page.screenshot(path=str(screenshots / "terminal.png"), full_page=True)
                 page.locator("#terminalclose").click()
                 assert page.evaluate("window.unsubscribed")
+                windows = page.locator("tr").filter(has=page.locator("td strong", has_text="win11"))
+                assert windows.locator('[data-action="terminal"]').count() == 0
+                page.evaluate("""async()=>{Object.assign(servers[0].instances[2],{name:'Desktop-2404',terminal_supported:true,guest_os:'ubuntu'});await document.querySelector('scottibyte-incus-panel').refresh();}""")
+                for width in (360, 390, 480, 1220):
+                    page.set_viewport_size({"width": width, "height": 844})
+                    vm = page.locator("tr").filter(has=page.locator("td strong", has_text="Desktop-2404"))
+                    vm.locator('[data-action="terminal"]').click()
+                    page.wait_for_function("document.querySelector('scottibyte-incus-panel').shadowRoot.querySelector('#terminalstatus').textContent==='Connected as root'")
+                    assert "VM guest shell via Incus agent" in page.locator("#terminalhint").inner_text()
+                    bounds = page.locator("#terminaldialog").bounding_box()
+                    assert bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width
+                    assert bounds["y"] >= 0 and bounds["y"] + bounds["height"] <= 844
+                    assert page.locator("#terminalclose").is_visible()
+                    page.screenshot(path=str(screenshots / f"vm-terminal-{width}.png"), full_page=False)
+                    page.locator("#terminalclose").click()
                 page.locator("#back").click()
                 assert page.locator('[data-server="rain"]').is_disabled()
                 assert "172.16.1.186" in page.locator('[data-server="storm"]').inner_text()

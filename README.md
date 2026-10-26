@@ -2,7 +2,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.1.0 — cluster member support.** Current features have been tested by Scott in his live Home Assistant/Incus environment, including the Pixel 7 Companion app. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
+**Version 1.1.1 — Linux VM guest terminals.** Scott has confirmed cluster member support in his live deployment. VM guest terminals pass automated tests and await live acceptance. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
 
 ## Features
 
@@ -12,7 +12,7 @@ A HACS-installable custom integration that brings multiple Incus servers into on
 - Server cards, per-server sortable instance tables, and global search by instance, server, project, status, IP, DNS label, or MAC.
 - Start containers and VMs; request orderly shutdown with a confirmation that identifies the instance.
 - Create named or automatically named snapshots for containers and VMs; list creation/expiry times, rename, delete, and restore snapshots through the snapshot manager.
-- Embedded root terminals for running Linux system containers, using Incus interactive execution. No SSH server is needed inside containers.
+- Embedded root terminals for running Linux system containers and Linux VMs, using Incus interactive execution. VMs require a working Incus agent. No guest SSH server is needed.
 - Administrator-only panel and backend management/terminal API.
 - Native Home Assistant devices and entities for automation and history.
 - Offline server cards show the configured address and last-known counts; instance listings are unavailable until the server reconnects.
@@ -25,7 +25,7 @@ A HACS-installable custom integration that brings multiple Incus servers into on
 - An initialized Incus server. Live testing used Incus 7.5.1; compatibility with other Incus versions has not been separately certified.
 - Home Assistant must reach the server over SSH during automatic setup and over HTTPS for normal use (default ports 22 and 8443).
 - An SSH account with Incus administrative access, either directly or through sudo. Password or a pasted private key is supported. SSH setups requiring interactive MFA are not supported by this initial build.
-- A Linux system container with `/bin/sh` for terminal access. Bash is used when present.
+- A Linux container or Linux VM with `/bin/sh` for terminal access. Bash is used when present. VMs need a working Incus agent.
 
 This is an integration, not a Home Assistant app/add-on or a separate web service. It works through the HA backend and needs no Docker sidecar.
 
@@ -40,7 +40,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.0** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.1** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
@@ -85,7 +85,7 @@ The top row shows combined inventory totals; server cards sit below it. Click a 
 - **Snapshot** opens a named-snapshot form; leave the name blank for an automatic name. **Manage snapshots** (the compact **Manage** button beside Snapshot) lists existing snapshots, creation/expiry dates, and whether saved memory is present. New snapshots omit running memory and inherit the server's snapshot-expiry policy.
 - Snapshot rename, delete, and restore are available in the manager. Delete and restore require confirmation. Restore accepts running or stopped instances and restores disk/configuration without saved running memory. Incus handles stopping and restarting an instance that is running; a stopped instance remains stopped. The integration does not issue a separate stop/start sequence. Mutations share the instance's lifecycle-operation lock and wait for Incus completion. An operation can continue if the browser disconnects; refresh before retrying after a timeout.
 - Snapshots reside with the instance and do not replace external backups. Attached custom storage volumes are excluded. Applications may require their own quiescing or backup procedures for consistency.
-- **Terminal** is available only for running system containers. It opens a root shell, closes on disconnect/unsubscribe, and sends SIGHUP to the shell on cleanup. Sessions close after 15 minutes without keyboard input or four hours total. There is a limit of two terminals per HA user and ten overall.
+- **Terminal** is available for running Linux system containers and Linux VMs. VM shells connect through the Incus agent. It opens a root shell, closes on disconnect/unsubscribe, and sends SIGHUP to the shell on cleanup. Sessions close after 15 minutes without keyboard input or four hours total. There is a limit of two terminals per HA user and ten overall.
 - Action requests recheck live instance state and serialize operations per instance. Success is displayed only after Incus reports the operation completed.
 - A browser disconnection does not cancel an already requested start/stop operation. Refresh to see the resulting state.
 - Server inventory polls every 30 seconds by default. Change it under the integration's options (10–300 seconds). The panel rereads HA's cached inventory every five seconds; it does not poll Incus every five seconds.
@@ -107,7 +107,7 @@ Status values include `Running`, `Stopped`, transitional states, and `unavailabl
 - IP/MAC information comes from Incus instance state. A VM without a functioning Incus agent may have no guest IP or usage information.
 - Primary IP selection prefers an explicitly named Incus NIC, then ordinary guest interfaces, ahead of recognizable nested Docker/bridge interfaces. IPv4 is preferred within the same interface tier. All reported addresses remain in Details. This is a heuristic, not route discovery; unusual multi-NIC configurations need validation.
 - DNS labels prefer explicit `user.dns_name`, otherwise cached reverse lookups through HA's system resolver. Successful results are cached for ten minutes, missing records for one minute. Queries run in the background and names appear on a subsequent inventory poll. No Pi-hole credentials are needed. DHCP must configure a resolver that can answer local PTR queries. A forward DNS record alone does not guarantee a PTR record.
-- VM start/stop is included. VM shells, serial consoles, and graphical consoles are not included in version one.
+- VM start/stop and Linux VM agent-based shells are included. Windows shells, serial consoles, and graphical consoles are not included.
 - Cluster inventory is grouped under one configured entry; instance location is displayed under its server label. Shared server-certificate fingerprints prevent enrolling the same cluster more than once. Servers deliberately reusing identical certificates will also be treated as duplicates.
 - Snapshot checkpoints are saved approximately every two minutes. A crash can lose recent inventory changes.
 - Removed instances leave their registered HA entities unavailable; automatic registry cleanup is deferred.
@@ -129,7 +129,7 @@ Renaming an entry is supported through HA’s native integration page. Use **Rec
 | SSH succeeds but enrollment fails | Incus permissions, sudo password, selected HTTPS port, existing listener binding, firewall |
 | Server becomes unavailable after certificate changes | Use Reconfigure → Renew certificate trust; verify the server identity again |
 | Missing VM IP or metrics | Incus agent inside that VM |
-| No terminal button | A running Linux system container is required |
+| No terminal button | A running Linux container or VM is required; refresh inventory after updating |
 | Blank/missing panel after an update | Reload the HA browser/app frontend; confirm the bundled frontend directory was installed |
 | Shutdown times out | Resolve guest shutdown problems; version one does not force-kill instances |
 
@@ -138,6 +138,10 @@ Renaming an entry is supported through HA’s native integration page. Use **Rec
 See [DEVELOPMENT.md](DEVELOPMENT.md) for staging in an Incus container, running checks, and pushing to GitHub. See [VALIDATION.md](VALIDATION.md) for the test scope and live acceptance checklist.
 
 Project code is MIT licensed. Bundled xterm.js and its fit addon retain their upstream MIT license files in `frontend/vendor/`.
+
+## VM terminal requirements
+
+VM guest terminals require a working Incus agent and `/bin/sh`. Known Windows and BSD/macOS guests are excluded from the Linux shell action. When guest OS metadata is absent, a shell attempt is allowed for custom Linux images; this does not guarantee a Linux guest or working agent. Agent or shell failures are reported in the terminal dialog. No SSH setup is required inside the guest.
 
 ## Support ScottiBYTE
 

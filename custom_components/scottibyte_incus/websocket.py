@@ -177,8 +177,8 @@ async def terminal_open(hass, connection, msg):
         item = next(
             i for i in coordinator.snapshot["instances"] if i["name"] == msg["name"] and i["project"] == msg["project"]
         )
-        if item["type"] != "container":
-            raise IncusError("Version one supports terminals for containers only")
+        if not item.get("terminal_supported", item["type"] == "container"):
+            raise IncusError("Guest terminals support Linux containers and Linux VMs only")
         token = secrets.token_urlsafe(32)
         # Reserve before awaiting connection: concurrent opens cannot bypass the limit.
         record = {
@@ -199,8 +199,13 @@ async def terminal_open(hass, connection, msg):
         connection.subscriptions[msg["id"]] = unsubscribe
         state = await coordinator.client.state(msg["project"], msg["name"])
         if state.get("status") != "Running":
-            raise IncusError("Start the container before opening its terminal")
-        record["session"] = await coordinator.client.terminal(msg["project"], msg["name"], msg["cols"], msg["rows"])
+            raise IncusError("Start the instance before opening its terminal")
+        try:
+            record["session"] = await coordinator.client.terminal(msg["project"], msg["name"], msg["cols"], msg["rows"])
+        except IncusError as err:
+            if item["type"] == "virtual-machine":
+                raise IncusError(f"Could not open the VM guest shell. Check that the Incus agent is running and /bin/sh is available. Incus reported: {err}") from err
+            raise
         _LOGGER.info(
             "Incus root terminal opened by HA user %s on %s/%s/%s",
             connection.user.id,
