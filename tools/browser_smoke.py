@@ -230,6 +230,7 @@ def main():
                     label = page.locator(".cluster-member")
                     assert label.is_visible()
                     assert "vmscloud-incus" in label.inner_text()
+                    assert "API:" not in page.locator('[data-server="storm"]').inner_text()
                     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                     assert label.evaluate("el => el.scrollWidth <= el.clientWidth")
                     page.screenshot(path=str(screenshots / f"cluster-{width}.png"), full_page=True)

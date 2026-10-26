@@ -2,7 +2,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.1.1 — Linux VM guest terminals.** Scott has confirmed cluster member support in his live deployment. VM guest terminals pass automated tests and await live acceptance. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
+**Version 1.1.2 — cleaner cluster cards.** Scott has confirmed cluster member support in his live deployment. VM guest terminals pass automated tests and await live acceptance. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
 
 ## Features
 
@@ -40,7 +40,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.1** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.2** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
@@ -149,7 +149,7 @@ If you find this integration useful, you can [donate through PayPal](https://www
 
 ## Cluster member cards (v1.1.0)
 
-Add each cluster member through Add server. Members share a pinned server certificate, but each configured member gets its own client certificate, entry and card. Existing entries remain in place. Cluster cards show member name, cluster size and active API endpoint. Card inventory and counts cover only that member; add all members for a complete cluster summary. Standalone server behavior is unchanged.
+Add each cluster member through Add server. Members share a pinned server certificate, but each configured member gets its own client certificate, entry and card. Existing entries remain in place. Cluster cards show the server IP, member name and cluster size. The redundant API address line is omitted. Card inventory and counts cover only that member; add all members for a complete cluster summary. Standalone server behavior is unchanged.
 
 Endpoints are discovered through the authenticated cluster membership API and checkpointed with inventory. On a later refresh, an unreachable API endpoint can be replaced by another discovered member using the same pinned TLS context. Discovery addresses must resolve and be reachable from HA. No failover is possible before the first successful discovery. An actually offline member remains unavailable; other online member cards remain usable. Cluster quorum and Incus availability are still required. Existing terminals are not resumed after a connection failure, and action submissions are never automatically replayed.
 
