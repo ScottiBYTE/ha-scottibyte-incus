@@ -5,7 +5,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.1.2 — cleaner cluster cards.** Scott has confirmed cluster member support in his live deployment. VM guest terminals pass automated tests and await live acceptance. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
+**Version 1.1.3 — integration branding and HACS validation.** Scott has confirmed cluster member support in his live deployment. VM guest terminals pass automated tests and await live acceptance. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
 
 ## Features
 
@@ -43,7 +43,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.2** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.3** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 

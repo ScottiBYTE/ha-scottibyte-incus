@@ -13,7 +13,7 @@ fi
 python3 - <<'CHECK'
 import json
 from pathlib import Path
-assert json.loads(Path("custom_components/scottibyte_incus/manifest.json").read_text())["version"] == "1.1.2"
+assert json.loads(Path("custom_components/scottibyte_incus/manifest.json").read_text())["version"] == "1.1.3"
 CHECK
 run_id=""
 for attempt in {1..20}; do
@@ -29,15 +29,15 @@ if ! gh run watch "$run_id" --exit-status; then
   gh run view "$run_id" --log-failed
   exit 1
 fi
-if gh release view v1.1.2 >/dev/null 2>&1; then
-  echo "v1.1.2 already exists; leaving it unchanged."
+if gh release view v1.1.3 >/dev/null 2>&1; then
+  echo "v1.1.3 already exists; leaving it unchanged."
   exit 0
 fi
-if gh api repos/ScottiBYTE/ha-scottibyte-incus/git/ref/tags/v1.1.2 >/dev/null 2>&1; then
-  tagged_commit=$(gh api repos/ScottiBYTE/ha-scottibyte-incus/commits/v1.1.2 --jq .sha)
+if gh api repos/ScottiBYTE/ha-scottibyte-incus/git/ref/tags/v1.1.3 >/dev/null 2>&1; then
+  tagged_commit=$(gh api repos/ScottiBYTE/ha-scottibyte-incus/commits/v1.1.3 --jq .sha)
   if [ "$tagged_commit" != "$release_commit" ]; then
-    echo "Existing v1.1.2 tag points to another commit; no release created."
+    echo "Existing v1.1.3 tag points to another commit; no release created."
     exit 1
   fi
 fi
-gh release create v1.1.2 --target "$release_commit" --latest --title "ScottiBYTE Incus v1.1.2" --notes-file RELEASE_NOTES_1.1.2.md
+gh release create v1.1.3 --target "$release_commit" --latest --title "ScottiBYTE Incus v1.1.3" --notes-file RELEASE_NOTES_1.1.3.md
