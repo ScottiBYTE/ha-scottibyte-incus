@@ -1,5 +1,8 @@
 # ScottiBYTE Incus for Home Assistant
 
+![ScottiBYTE Incus](custom_components/scottibyte_incus/brand/icon.png)
+
+
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
 **Version 1.1.2 — cleaner cluster cards.** Scott has confirmed cluster member support in his live deployment. VM guest terminals pass automated tests and await live acceptance. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
