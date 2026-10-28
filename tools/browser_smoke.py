@@ -26,13 +26,16 @@ window.servers=[
 {id:'rain',name:'vmsrain',host:'2001:db8:1234:5678:1234:5678:1234:5678',version:'7.5.1',online:false,instances:[make('Paperless','Running','container','172.16.1.50')]}
 ];
 function recalc(){for(const s of servers){s.last_success=new Date().toISOString();s.counts={total:s.instances.length,running:s.instances.filter(i=>i.status==='Running').length,stopped:s.instances.filter(i=>i.status==='Stopped').length,containers:s.instances.filter(i=>i.type==='container').length,vms:s.instances.filter(i=>i.type==='virtual-machine').length};}}
+for(const s of servers){s.host_metrics={configured:true,online:s.online,cpu_percent:12.4,memory_percent:38.2,memory_used:48962627174,memory_total:128000000000,filesystems:[{mount:'/',filesystem:'ext4',used:450971566080,total:1979120929996},{mount:'/mnt/storage-with-a-long-name-for-mobile-check',filesystem:'xfs',used:123456789000,total:987654321000}]};}
 recalc();window.inputs=[];window.unsubscribed=false;
 let snapshots = [];
 let terminalCallback;
 let serverOrder = JSON.parse(localStorage.getItem('mock-order') || '[]');
+let refreshSeconds = Number(localStorage.getItem('mock-refresh')||30);
 const panel=document.createElement('scottibyte-incus-panel');
 panel.hass={callWS:async message=>{
-if(message.type.endsWith('/dashboard'))return {server_order:serverOrder};
+if(message.type.endsWith('/dashboard'))return {server_order:serverOrder,refresh_seconds:refreshSeconds};
+if(message.type.endsWith('/refresh_interval')){refreshSeconds=message.seconds;localStorage.setItem('mock-refresh',String(refreshSeconds));return {server_order:serverOrder,refresh_seconds:refreshSeconds};}
 if(message.type.endsWith('/server_order')){serverOrder=message.order;localStorage.setItem('mock-order',JSON.stringify(serverOrder));return {server_order:serverOrder};}
 if(message.type.endsWith('/snapshots'))return structuredClone(snapshots);
 if(message.type.endsWith('/snapshot_action')){
@@ -77,6 +80,16 @@ def main():
                 page.wait_for_selector("scottibyte-incus-panel .server-card")
                 assert page.locator(".server-card").count() == 3
                 assert page.locator(".stat").count() == 6
+                assert page.locator(".host-metrics").count() == 3
+                assert "12.4%" in page.locator(".host-metrics").first.inner_text()
+                assert "38.2%" in page.locator(".host-metrics").first.inner_text()
+                assert "/" in page.locator(".host-disk").first.inner_text()
+                page.locator("#refresh-interval").select_option("60")
+                page.wait_for_function("document.querySelector('scottibyte-incus-panel').notice.includes('Refresh interval saved')")
+                assert page.evaluate("localStorage.getItem('mock-refresh')") == "60"
+                page.reload()
+                page.wait_for_selector("scottibyte-incus-panel .server-card")
+                assert page.locator("#refresh-interval").input_value() == "60"
                 assert page.locator(".app-version").inner_text() == "v9.8.7"
                 assert page.locator(".donate-link").get_attribute("href") == "https://www.paypal.com/paypalme/ScottiBYTE"
                 assert page.locator(".donate-link").get_attribute("target") == "_blank"
@@ -233,6 +246,8 @@ def main():
                     assert "API:" not in page.locator('[data-server="storm"]').inner_text()
                     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                     assert label.evaluate("el => el.scrollWidth <= el.clientWidth")
+                    assert page.locator("#refresh-interval").is_visible()
+                    assert page.locator(".host-metrics").first.evaluate("el => el.scrollWidth <= el.clientWidth")
                     page.screenshot(path=str(screenshots / f"cluster-{width}.png"), full_page=True)
                 assert not errors, errors
                 browser.close()

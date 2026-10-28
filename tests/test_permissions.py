@@ -9,7 +9,7 @@ from custom_components.scottibyte_incus import websocket as ws
 from custom_components.scottibyte_incus.const import DOMAIN
 
 
-@pytest.mark.parametrize("handler", [ws.inventory, ws.dashboard, ws.server_order, ws.refresh, ws.action, ws.snapshots, ws.snapshot_action, ws.terminal_open, ws.terminal_input])
+@pytest.mark.parametrize("handler", [ws.inventory, ws.dashboard, ws.refresh_interval, ws.server_order, ws.refresh, ws.action, ws.snapshots, ws.snapshot_action, ws.terminal_open, ws.terminal_input])
 def test_non_admin_cannot_call_any_backend_endpoint(handler):
     connection = SimpleNamespace(user=SimpleNamespace(is_admin=False))
     with pytest.raises(Unauthorized):

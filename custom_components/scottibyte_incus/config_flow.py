@@ -25,6 +25,9 @@ from .bootstrap import (
     write_credentials,
 )
 from .const import DOMAIN
+from .dashboard import REFRESH_INTERVALS, set_refresh_interval
+from .host_metrics import HostMonitor
+from .host_metrics import install as install_host_metrics
 
 
 def text(secret=False, multiline=False):
@@ -40,7 +43,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reconfigure(self, user_input=None):
         self._editing_entry = self._get_reconfigure_entry()
-        return self.async_show_menu(step_id="reconfigure", menu_options=["connection", "renew_trust"])
+        return self.async_show_menu(step_id="reconfigure", menu_options=["connection", "renew_trust", "host_metrics"])
 
     async def async_step_reauth(self, entry_data):
         self._editing_entry = self._get_reauth_entry()
@@ -48,6 +51,41 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_renew_trust(self, user_input=None):
         return await self.async_step_user()
+
+    async def async_step_host_metrics(self, user_input=None):
+        entry = self._editing_entry
+        errors = {}
+        if user_input is not None:
+            if not user_input["enabled"]:
+                await self._remove_host_metrics(entry.data.get("host_metrics"))
+                return self.async_update_reload_and_abort(entry, data_updates={"host_metrics": None})
+            try:
+                self._settings = {**user_input, "host": entry.data["host"], "ssh_port": user_input["ssh_port"]}
+                self._host_key = await discover_server(entry.data["host"], user_input["ssh_port"])
+                self._metrics_only = True
+                return await self.async_step_confirm_host()
+            except Exception:
+                self._settings = {}
+                errors["base"] = "ssh_unreachable"
+        return self.async_show_form(step_id="host_metrics", data_schema=vol.Schema({
+            vol.Required("enabled", default=True): bool,
+            vol.Required("ssh_port", default=entry.data.get("host_metrics", {}).get("port", 22) if entry.data.get("host_metrics") else 22): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+            vol.Optional("username", default=entry.data.get("host_metrics", {}).get("username", "") if entry.data.get("host_metrics") else ""): str,
+            vol.Optional("password"): text(secret=True),
+            vol.Optional("ssh_key"): text(secret=True, multiline=True),
+            vol.Optional("key_passphrase"): text(secret=True),
+        }), errors=errors)
+
+    async def _remove_host_metrics(self, config):
+        if not config:
+            return
+        try:
+            await HostMonitor(self.hass, config).remove()
+        except Exception:
+            persistent_notification.async_create(self.hass,
+                f"Remove only the authorized_keys line ending with {config['marker']} from SSH account {config['username']} on {config['host']}. Local metrics credentials were removed.",
+                title="Host metrics SSH key cleanup required")
+        await self.hass.async_add_executor_job(shutil.rmtree, Path(self.hass.config.path(".storage", DOMAIN, config["credential_id"])), True)
 
     def _default(self, key, fallback=""):
         entry = getattr(self, "_editing_entry", None)
@@ -96,6 +134,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 raise ValueError("This endpoint is already configured")
 
     async def async_step_user(self, user_input=None):
+        self._metrics_only = False
         return self.async_show_menu(step_id="user", menu_options=["ssh", "token"])
 
     async def async_step_ssh(self, user_input=None):
@@ -128,6 +167,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional("key_passphrase"): text(secret=True),
                     vol.Required("projects", default=self._default("projects", "*")): str,
                     vol.Required("enable_https", default=True): bool,
+                    vol.Required("host_metrics", default=True): bool,
                 }
             ),
             errors=errors,
@@ -137,12 +177,23 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             cert, key = await self.hass.async_add_executor_job(generate_certificate)
             try:
+                if getattr(self, "_metrics_only", False):
+                    config = await install_host_metrics(self.hass, self._settings, self._host_key)
+                    entry = self._editing_entry
+                    old_metrics = entry.data.get("host_metrics")
+                    try:
+                        result = self.async_update_reload_and_abort(entry, data_updates={"host_metrics": config})
+                    except Exception:
+                        await self._remove_host_metrics(config)
+                        raise
+                    await self._remove_host_metrics(old_metrics)
+                    return result
                 pem, info = await enroll_ssh(self._settings, self._host_key, cert, key)
                 return await self._finish(self._settings, pem, info, cert, key)
             except EnrollmentError as err:
                 message = str(err)
             except Exception:
-                message = "Could not enroll. Check SSH authentication, Incus permissions, API address/port, and network reachability."
+                message = "Host metrics setup failed. Check SSH authentication, Python 3 and writable ~/.ssh/authorized_keys." if getattr(self, "_metrics_only", False) else "Could not enroll. Check SSH authentication, Incus permissions, API address/port, and network reachability."
             finally:
                 # Passwords/private SSH keys never survive the enrollment attempt.
                 self._settings = {
@@ -160,6 +211,8 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_failed(self, user_input=None):
+        if getattr(self, "_metrics_only", False):
+            return await self.async_step_host_metrics()
         return await self.async_step_user()
 
     async def async_step_token(self, user_input=None):
@@ -242,6 +295,16 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if requested_name and requested_name.casefold() != "incus"
             else detected_name or settings["host"]
         )
+        metrics = entry.data.get("host_metrics") if entry else None
+        retired_metrics = None
+        if settings.get("host_metrics") and hasattr(self, "_host_key"):
+            try:
+                new_metrics = await install_host_metrics(self.hass, settings, self._host_key)
+            except Exception:
+                await self._discard_enrollment(settings, pem, cert, key)
+                raise EnrollmentError("Host metrics setup failed. Check Python 3 and writable ~/.ssh/authorized_keys on the SSH account, or turn off host metrics and configure it later.") from None
+            retired_metrics = metrics
+            metrics = new_metrics
         ident = uuid4().hex
         directory = Path(self.hass.config.path(".storage", DOMAIN, ident))
 
@@ -250,10 +313,16 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             write_credentials(directory / "client.crt", directory / "client.key", cert, key)
             (directory / "server.crt").write_text(pem)
 
-        await self.hass.async_add_executor_job(save)
+        try:
+            await self.hass.async_add_executor_job(save)
+        except Exception:
+            if settings.get("host_metrics") and metrics:
+                await self._remove_host_metrics(metrics)
+            await self._discard_enrollment(settings, pem, cert, key)
+            raise
         data = {
             "host": settings["host"], "api_port": settings["api_port"], "projects": projects,
-            "credential_id": ident, "server_name": detected_name or settings["host"], "fingerprint": fingerprint, "cluster_member": member,
+            "credential_id": ident, "server_name": detected_name or settings["host"], "fingerprint": fingerprint, "cluster_member": member, "host_metrics": metrics,
         }
         entry = getattr(self, "_editing_entry", None)
         if entry is None:
@@ -266,6 +335,7 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except OSError:
             pass
         result = self.async_update_reload_and_abort(entry, unique_id=unique_id, title=display_name, data=data)
+        await self._remove_host_metrics(retired_metrics)
         if old_fingerprint:
             client = None
             try:
@@ -295,13 +365,14 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class IncusOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_init(self, user_input=None):
         if user_input is not None:
+            await set_refresh_interval(self.hass, user_input["poll_seconds"])
             return self.async_create_entry(title="", data=user_input)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required("poll_seconds", default=self.config_entry.options.get("poll_seconds", 30)): vol.All(
-                        vol.Coerce(int), vol.Range(min=10, max=300)
+                    vol.Required("poll_seconds", default=self.hass.data[DOMAIN]["dashboard"].get("refresh_seconds", 30)): vol.All(
+                        vol.Coerce(int), vol.In(REFRESH_INTERVALS)
                     ),
                 }
             ),

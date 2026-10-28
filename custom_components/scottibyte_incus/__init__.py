@@ -17,6 +17,7 @@ from .api import IncusClient, certificate_fingerprint, make_ssl_context
 from .bootstrap import api_url
 from .const import DOMAIN, PANEL_URL, PLATFORMS, STATIC_URL
 from .coordinator import IncusCoordinator
+from .host_metrics import HostMonitor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ async def async_setup(hass, config):
     hass.data[DOMAIN] = {"coordinators": {}, "terminals": {}, "locks": {}}
     dashboard_store = Store(hass, 1, f"{DOMAIN}.dashboard")
     hass.data[DOMAIN]["dashboard_store"] = dashboard_store
-    hass.data[DOMAIN]["dashboard"] = await dashboard_store.async_load() or {"server_order": []}
+    hass.data[DOMAIN]["dashboard"] = {"refresh_seconds": 30, "server_order": [], **(await dashboard_store.async_load() or {})}
     hass.data[DOMAIN]["dashboard_lock"] = asyncio.Lock()
     websocket.register(hass)
     await hass.http.async_register_static_paths(
@@ -100,6 +101,15 @@ async def async_unload_entry(hass, entry):
 async def async_remove_entry(hass, entry):
     """Revoke only this entry's identity; allow local removal if unreachable."""
     directory = Path(hass.config.path(".storage", DOMAIN, entry.data["credential_id"]))
+    metrics = entry.data.get("host_metrics")
+    if metrics:
+        try:
+            await HostMonitor(hass, metrics).remove()
+        except Exception:
+            persistent_notification.async_create(hass,
+                f"On {metrics['host']}, remove only the authorized_keys line ending with {metrics['marker']} from account {metrics['username']}. Local metrics credentials were removed.",
+                title="Host metrics SSH key cleanup required")
+        await hass.async_add_executor_job(shutil.rmtree, Path(hass.config.path(".storage", DOMAIN, metrics["credential_id"])), True)
     client = None
     fingerprint = None
 

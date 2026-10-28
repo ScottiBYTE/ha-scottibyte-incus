@@ -20,6 +20,7 @@ from homeassistant.core import callback
 
 from .api import IncusError
 from .const import DOMAIN
+from .dashboard import REFRESH_INTERVALS, set_refresh_interval
 
 _LOGGER = logging.getLogger(__name__)
 TARGET = {vol.Required("server"): str, vol.Required("project"): str, vol.Required("name"): str}
@@ -62,6 +63,17 @@ async def dashboard(hass, connection, msg):
     connection.send_result(msg["id"], hass.data[DOMAIN]["dashboard"])
 
 
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/refresh_interval", vol.Required("seconds"): vol.In(REFRESH_INTERVALS)})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def refresh_interval(hass, connection, msg):
+    try:
+        result = await set_refresh_interval(hass, msg["seconds"])
+        connection.send_result(msg["id"], result)
+    except Exception as err:
+        safe_error(connection, msg, err)
+
+
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/server_order", vol.Required("order"): [str]})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -73,7 +85,7 @@ async def server_order(hass, connection, msg):
         connection.send_error(msg["id"], "invalid_order", "Server list changed; refresh and try again.")
         return
     async with data["dashboard_lock"]:
-        updated = {"server_order": order}
+        updated = {**data["dashboard"], "server_order": order}
         await data["dashboard_store"].async_save(updated)
         data["dashboard"] = updated
     connection.send_result(msg["id"], updated)
@@ -300,5 +312,5 @@ async def close_terminals(hass, server=None):
 
 @callback
 def register(hass):
-    for handler in (inventory, dashboard, server_order, refresh, action, snapshots, snapshot_action, terminal_open, terminal_input):
+    for handler in (inventory, dashboard, refresh_interval, server_order, refresh, action, snapshots, snapshot_action, terminal_open, terminal_input):
         websocket_api.async_register_command(hass, handler)

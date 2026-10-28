@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .api import IncusError
 from .const import DOMAIN
 from .dns import ReverseDNS
+from .host_metrics import HostMonitor
 from .models import counts, normalize_instance, utc_now
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class IncusCoordinator(DataUpdateCoordinator):
             _LOGGER,
             name=entry.title,
             config_entry=entry,
-            update_interval=timedelta(seconds=entry.options.get("poll_seconds", 30)),
+            update_interval=timedelta(seconds=hass.data[DOMAIN]["dashboard"].get("refresh_seconds", 30)),
         )
         self.entry, self.client = entry, client
         self.store = Store(hass, 1, f"{DOMAIN}.inventory.{entry.entry_id}")
@@ -34,6 +35,7 @@ class IncusCoordinator(DataUpdateCoordinator):
             "version": "",
             "clustered": False,
         }
+        self.host_monitor = HostMonitor(hass, entry.data.get("host_metrics"))
         self.dns = ReverseDNS(hass)
         self._sample_at = None
         self._last_saved = 0
@@ -48,6 +50,8 @@ class IncusCoordinator(DataUpdateCoordinator):
                 self.snapshot["counts"] = counts(self.snapshot["instances"])
 
     async def _async_update_data(self):
+        if hasattr(self, "host_monitor"):
+            self.snapshot["host_metrics"] = await self.host_monitor.collect()
         try:
             if hasattr(self.client, "set_endpoints"):
                 self.client.set_endpoints(self.snapshot.get("cluster_members", []))
@@ -74,6 +78,7 @@ class IncusCoordinator(DataUpdateCoordinator):
             env = info.get("environment", {})
             self.snapshot = {
                 "online": True,
+                "host_metrics": self.snapshot.get("host_metrics", {"configured": False, "online": False}),
                 "instances": instances,
                 "counts": counts(instances),
                 "last_success": utc_now(),

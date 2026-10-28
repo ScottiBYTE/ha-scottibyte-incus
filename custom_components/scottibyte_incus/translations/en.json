@@ -11,7 +11,7 @@
       },
       "ssh": {
         "title": "Connect to your Incus server",
-        "description": "Leave the display name blank to use the server hostname automatically. Enter a host account that can administer Incus, directly or through sudo. SSH credentials are used only during setup and are not saved. This connection grants Home Assistant Incus management access. Projects: * for all, or comma-separated names. Automatic HTTPS setup enables Incus on all host interfaces at the selected API port if no listener exists. Existing listeners and firewall rules are left unchanged.",
+        "description": "Leave the display name blank to use the server hostname automatically. Enter a host account that can administer Incus, directly or through sudo. SSH credentials are used only during setup and are not saved. This connection grants Home Assistant Incus management access. Projects: * for all, or comma-separated names. Automatic HTTPS setup enables Incus on all host interfaces at the selected API port if no listener exists. Existing listeners and firewall rules are left unchanged. Host monitoring installs a dedicated metrics-only SSH public key in this account. The matching key is stored privately in Home Assistant. Python 3 and writable ~/.ssh/authorized_keys are required. No SSH password is saved.",
         "data": {
           "name": "Display name (optional; detected from server)",
           "host": "Server IP address or hostname",
@@ -23,12 +23,13 @@
           "ssh_key": "SSH private key (optional)",
           "key_passphrase": "SSH key passphrase (optional)",
           "projects": "Projects",
-          "enable_https": "Enable Incus HTTPS automatically if disabled"
+          "enable_https": "Enable Incus HTTPS automatically if disabled",
+          "host_metrics": "Set up whole-server CPU, memory and filesystem monitoring"
         }
       },
       "confirm_host": {
         "title": "Verify SSH server identity",
-        "description": "Server: {host}\n\nSSH fingerprint: {fingerprint}\n\nCompare this with your server\u2019s SSH host key fingerprint before continuing. Continuing allows this integration to create Incus certificate trust and, if selected, enable its HTTPS listener. No password has been sent yet."
+        "description": "Server: {host}\n\nSSH fingerprint: {fingerprint}\n\nVerify this fingerprint before continuing. This permits the selected setup changes, including Incus enrollment and/or installation of a restricted host-metrics key. No password has been sent yet."
       },
       "failed": {
         "title": "Server setup did not complete",
@@ -49,7 +50,8 @@
         "title": "Manage Incus server connection",
         "menu_options": {
           "connection": "Change address, port, or projects (keep existing trust)",
-          "renew_trust": "Renew certificate trust using SSH or a one-time token"
+          "renew_trust": "Renew certificate trust using SSH or a one-time token",
+          "host_metrics": "Set up or disable whole-server metrics"
         }
       },
       "connection": {
@@ -59,6 +61,18 @@
           "host": "Server IP address or hostname",
           "api_port": "Incus HTTPS port",
           "projects": "Projects (* or comma-separated names)"
+        }
+      },
+      "host_metrics": {
+        "title": "Whole-server monitoring",
+        "description": "Read this host’s total CPU, RAM and local filesystem usage independently of Incus. Setup adds a dedicated SSH key restricted to metrics and removal of that key. No password is stored. Python 3 and writable ~/.ssh/authorized_keys are required. Uncheck Enable to remove monitoring; authentication fields are then unused. Each cluster member needs its own setup.",
+        "data": {
+          "enabled": "Enable whole-server metrics",
+          "ssh_port": "SSH port",
+          "username": "SSH username",
+          "password": "SSH password (setup only)",
+          "ssh_key": "SSH private key (optional, setup only)",
+          "key_passphrase": "SSH key passphrase (optional, setup only)"
         }
       }
     },
@@ -75,10 +89,11 @@
   "options": {
     "step": {
       "init": {
-        "title": "Incus polling",
+        "title": "Dashboard refresh interval",
         "data": {
-          "poll_seconds": "Polling interval in seconds (10\u2013300)"
-        }
+          "poll_seconds": "Polling interval: 10, 30, 60 or 300 seconds"
+        },
+        "description": "Applies to all server polling and host metrics. The same setting is available on the dashboard."
       }
     }
   }

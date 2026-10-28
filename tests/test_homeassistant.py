@@ -75,6 +75,7 @@ async def test_config_flow_menu_and_host_confirmation(hass):
                 "password": "temporary-secret",
                 "projects": "*",
                 "enable_https": True,
+                "host_metrics": False,
             },
         )
     assert flow["step_id"] == "confirm_host"
@@ -83,8 +84,12 @@ async def test_config_flow_menu_and_host_confirmation(hass):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("requested_name", "expected_title"), [(None, "demo-1"), ("", "demo-1"), ("Incus", "demo-1"), (" Office lab ", "Office lab")])
-async def test_finished_setup_does_not_persist_ssh_credentials(hass, requested_name, expected_title):
+@pytest.mark.parametrize(
+    ("requested_name", "expected_title"),
+    [(None, "demo-1"), ("", "demo-1"), ("Incus", "demo-1"), (" Office lab ", "Office lab")],
+)
+@pytest.mark.parametrize("enable_metrics", [False, True])
+async def test_finished_setup_does_not_persist_ssh_credentials(hass, requested_name, expected_title, enable_metrics):
     assert await async_setup_component(hass, DOMAIN, {})
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "ssh"})
@@ -102,11 +107,13 @@ async def test_finished_setup_does_not_persist_ssh_credentials(hass, requested_n
                 "sudo_password": "also-private",
                 "projects": "*",
                 "enable_https": True,
+                "host_metrics": enable_metrics,
             },
         )
     server_cert, _ = generate_certificate()
     info = {"auth": "trusted", "environment": {"server_name": "demo-1"}}
     with (
+        patch("custom_components.scottibyte_incus.config_flow.install_host_metrics", new=AsyncMock(return_value={"credential_id": "metrics-test", "host": "172.16.0.10", "port": 22, "username": "novice", "marker": "ha-scottibyte-host-test"})) as install_metrics,
         patch(
             "custom_components.scottibyte_incus.config_flow.enroll_ssh", new=AsyncMock(return_value=(server_cert, info))
         ),
@@ -114,6 +121,8 @@ async def test_finished_setup_does_not_persist_ssh_credentials(hass, requested_n
     ):
         flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {})
         await hass.async_block_till_done()
+    assert install_metrics.await_count == int(enable_metrics)
+    assert bool(flow["data"].get("host_metrics")) == enable_metrics
     assert flow["type"] == "create_entry"
     assert flow["result"].title == expected_title
     assert "do-not-save" not in str(flow["data"]) and "also-private" not in str(flow["data"])

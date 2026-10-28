@@ -5,7 +5,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.1.3 — integration branding and HACS validation.** Scott has confirmed cluster member support in his live deployment. VM guest terminals pass automated tests and await live acceptance. Install the numbered release through HACS as a custom repository. Default HACS catalog listing is a separate submission.
+**Version 1.2.0-beta.1 — whole-server metrics testing.** Live acceptance of the new host monitoring is pending. v1.1.3 remains the stable release; enable beta releases in HACS to select this candidate.
 
 ## Features
 
@@ -26,7 +26,7 @@ A HACS-installable custom integration that brings multiple Incus servers into on
 
 - Home Assistant **2026.10 or newer**. The tested runtime is 2026.10.4.
 - An initialized Incus server. Live testing used Incus 7.5.1; compatibility with other Incus versions has not been separately certified.
-- Home Assistant must reach the server over SSH during automatic setup and over HTTPS for normal use (default ports 22 and 8443).
+- Home Assistant must reach the server over SSH during automatic setup and over HTTPS for Incus management (default ports 22 and 8443). Optional host monitoring also needs ongoing SSH access.
 - An SSH account with Incus administrative access, either directly or through sudo. Password or a pasted private key is supported. SSH setups requiring interactive MFA are not supported by this initial build.
 - A Linux container or Linux VM with `/bin/sh` for terminal access. Bash is used when present. VMs need a working Incus agent.
 
@@ -43,7 +43,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.1.3** release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). For testing, enable beta releases and select **v1.2.0-beta.1** in HACS; **v1.1.3** remains stable. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
@@ -67,7 +67,7 @@ The resulting folder must contain `manifest.json`, `__init__.py`, `config_flow.p
 6. Checks the HTTPS server certificate against the fingerprint in that token.
 7. Registers a newly generated HA client certificate using the token.
 8. Stores the client certificate/private key and pinned server certificate in HA's `.storage/scottibyte_incus/` directory. The private key has mode `0600`.
-9. Discards the SSH password, sudo password, pasted SSH key, and token. Ongoing requests use certificate authentication only.
+9. Discards the SSH password, sudo password, pasted SSH key, and token. Incus requests use certificate authentication. Optional host monitoring uses a separate restricted SSH key; supplied setup passwords and SSH keys are discarded.
 
 If enrollment fails after this attempt enabled the HTTPS listener, the integration attempts to revert that newly enabled listener. A firewall or unreachable address can still require an administrator's intervention. An unused token may remain until its Incus expiry. If you abandon setup after successful enrollment but before HA saves the entry, a certificate can remain in the server trust list and can be removed by an administrator.
 
@@ -91,7 +91,7 @@ The top row shows combined inventory totals; server cards sit below it. Click a 
 - **Terminal** is available for running Linux system containers and Linux VMs. VM shells connect through the Incus agent. It opens a root shell, closes on disconnect/unsubscribe, and sends SIGHUP to the shell on cleanup. Sessions close after 15 minutes without keyboard input or four hours total. There is a limit of two terminals per HA user and ten overall.
 - Action requests recheck live instance state and serialize operations per instance. Success is displayed only after Incus reports the operation completed.
 - A browser disconnection does not cancel an already requested start/stop operation. Refresh to see the resulting state.
-- Server inventory polls every 30 seconds by default. Change it under the integration's options (10–300 seconds). The panel rereads HA's cached inventory every five seconds; it does not poll Incus every five seconds.
+- Server inventory and host metrics poll every 30 seconds by default. The dashboard and integration options share a global 10/30/60/300-second setting. The panel rereads HA's cached inventory every five seconds; it does not poll Incus every five seconds.
 - An unreachable server shows an offline, non-clickable card with its configured IP address or hostname. Cached instances are excluded from server drill-down and global search; a server that goes offline while open returns the view to the cards. HA retains its internal checkpoint for recovery and marks summary totals that include last-known counts. Offline does not distinguish a powered-off host from network/API failures.
 
 ## Entities
@@ -157,3 +157,27 @@ Add each cluster member through Add server. Members share a pinned server certif
 Endpoints are discovered through the authenticated cluster membership API and checkpointed with inventory. On a later refresh, an unreachable API endpoint can be replaced by another discovered member using the same pinned TLS context. Discovery addresses must resolve and be reachable from HA. No failover is possible before the first successful discovery. An actually offline member remains unavailable; other online member cards remain usable. Cluster quorum and Incus availability are still required. Existing terminals are not resumed after a connection failure, and action submissions are never automatically replayed.
 
 Member card ordering and HA entry IDs survive this update. Instances migrated between members may leave old HA registry entities that require manual cleanup. Removing a member entry revokes only its own client identity. A failed remote revocation still requires the manual cleanup described by the integration notification.
+
+## Whole-server monitoring and refresh (v1.2 testing)
+
+These card measurements describe the Linux server's OS and every application on it, independently of Incus. CPU is a busy-time delta across all logical CPUs from /proc/stat; guest counters are not double-counted, and idle/iowait are excluded from busy time. Memory is (MemTotal - MemAvailable) / MemTotal. The instance drill-down metrics keep their existing behavior.
+
+Each local persistent filesystem is shown as mountpoint and used/total (used = total minus free). Pseudo, network, overlay and Incus guest mounts are excluded. Filesystems may share capacity, so their totals are never added together. The display is not an Incus storage-pool usage estimate.
+
+### Enable on an existing server
+
+Open Settings → Devices & services → ScottiBYTE Incus → the server entry's menu → Reconfigure → Set up or disable whole-server metrics. Enter the SSH username and setup password or private key, verify the host fingerprint, then submit. The account needs Python 3, readable /proc and writable ~/.ssh/authorized_keys; root and Incus administration permissions are not needed for monitoring alone. Standard OpenSSH authorized_keys processing is required.
+
+Setup appends a new public key using restrict plus a forced metrics command. The corresponding dedicated private key and pinned SSH host public key are stored privately under HA's .storage/scottibyte_incus/metrics-*/. Provided passwords and private keys are discarded after setup. No host daemon, listener, cron job or additional port is installed. Existing servers need this one-time setup because their original SSH setup credentials were not retained. Token-enrolled entries use the same monitoring setup separately. Automatic SSH enrollment offers monitoring as a checkbox.
+
+CPU displays Sampling until two readings are available. A reboot or SSH failure resets its sample baseline. Failed monitoring retains last-known values labeled unavailable. The Incus connection and host SSH monitoring have independent availability. Each cluster member is monitored directly; Incus API failover does not change the host being measured.
+
+### Refresh and cleanup
+
+The dashboard's Refresh every selector saves 10 seconds, 30 seconds, 1 minute or 5 minutes globally. This controls actual coordinator polling for Incus and host data. Integration options provide the same global setting. The browser reads HA's cached results every five seconds; the Refresh button requests a backend update. The default is 30 seconds.
+
+Uncheck Enable in the host-metrics setup form to disable monitoring. Disabling it or deleting an entry attempts to remove only that entry's authorized_keys line, then deletes its local key files. If remote cleanup fails, a persistent notification names the host/account and exact ha-scottibyte-host-* marker to remove manually. Do not delete other authorized_keys entries. Delete entries before uninstalling the integration so cleanup can run.
+
+Before downgrading to v1.1.3, disable host monitoring on each entry while the beta is installed so its SSH keys are removed.
+
+This beta still requires live acceptance on real hosts. v1.1.3 remains the stable release while testing is in progress.
