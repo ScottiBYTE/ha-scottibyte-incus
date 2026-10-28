@@ -250,6 +250,7 @@ def main():
                     assert page.locator(".host-metrics").first.evaluate("el => el.scrollWidth <= el.clientWidth")
                     page.screenshot(path=str(screenshots / f"cluster-{width}.png"), full_page=True)
                 page.evaluate("""async()=>{
+                    clearInterval(document.querySelector('scottibyte-incus-panel').timer);
                     const base=structuredClone(servers[0]);
                     window.servers=Array.from({length:10},(_,i)=>({...structuredClone(base),
                       id:'align-'+i,name:['VMSStorm','VMSMist','VMSRain','Mondo-2','VMSCloud-Incus','VMSFog-Incus','Incus-Member','VMSDroplet','Demo-1','Mondo (Dell XPS 8930)'][i],
@@ -271,6 +272,17 @@ def main():
                     assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth")
                     assert page.locator(".host-metrics").first.evaluate("el=>el.scrollWidth<=el.clientWidth")
                     page.locator(".server-card").first.screenshot(path=str(screenshots / f"card-alignment-{width}.png"))
+                assert "Whole server" not in page.locator(".server-card").first.inner_text()
+                assert "last known" in page.locator(".server-card").nth(1).inner_text()
+                for width in (320, 360, 390, 480):
+                    page.set_viewport_size({"width": width, "height": 844})
+                    for disks in page.locator(".host-disks").all():
+                        assert disks.evaluate("e=>e.scrollHeight<=e.clientHeight+1")
+                    for row in page.locator(".host-disk").all():
+                        assert row.evaluate("e=>e.scrollWidth<=e.clientWidth+1")
+                    assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth")
+                page.set_viewport_size({"width":390,"height":844})
+                page.locator(".server-card").nth(3).screenshot(path=str(screenshots / "compact-mobile.png"))
                 assert not errors, errors
                 browser.close()
                 print(
