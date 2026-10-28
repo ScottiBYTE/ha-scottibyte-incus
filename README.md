@@ -5,7 +5,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.2.0-beta.3 — whole-server metrics testing.** Live acceptance of the new host monitoring is pending. v1.1.3 remains the stable release; enable beta releases in HACS to select this candidate.
+**Version 1.2.0 — whole-server monitoring.** Stable release with host CPU, memory and filesystem usage, a saved refresh interval, and compact desktop and mobile server cards.
 
 ## Features
 
@@ -43,7 +43,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). For testing, enable beta releases and select **v1.2.0-beta.3** in HACS; **v1.1.3** remains stable. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.2.0** stable release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
@@ -158,7 +158,7 @@ Endpoints are discovered through the authenticated cluster membership API and ch
 
 Member card ordering and HA entry IDs survive this update. Instances migrated between members may leave old HA registry entities that require manual cleanup. Removing a member entry revokes only its own client identity. A failed remote revocation still requires the manual cleanup described by the integration notification.
 
-## Whole-server monitoring and refresh (v1.2 testing)
+## Whole-server monitoring and refresh
 
 These card measurements describe the Linux server's OS and every application on it, independently of Incus. CPU is a busy-time delta across all logical CPUs from /proc/stat; guest counters are not double-counted, and idle/iowait are excluded from busy time. Memory is (MemTotal - MemAvailable) / MemTotal. The instance drill-down metrics keep their existing behavior.
 
