@@ -240,7 +240,7 @@ def main():
                 page.evaluate("""async()=>{Object.assign(servers[0],{name:'VMSCloud-Incus',clustered:true,cluster_id:'abc12345abcdef',cluster_member:'vmscloud-incus',cluster_members:[{name:'vmscloud-incus'},{name:'vmsfog-incus'},{name:'incus-member'}],active_endpoint:'https://vmsfog-incus.very-long-local-domain.example:8443'});await document.querySelector('scottibyte-incus-panel').refresh();}""")
                 for width in (360, 390, 480, 1600):
                     page.set_viewport_size({"width": width, "height": 900})
-                    label = page.locator(".cluster-member")
+                    label = page.locator(".cluster-member:not(.membership-placeholder)")
                     assert label.is_visible()
                     assert "vmscloud-incus" in label.inner_text()
                     assert "API:" not in page.locator('[data-server="storm"]').inner_text()
@@ -249,6 +249,28 @@ def main():
                     assert page.locator("#refresh-interval").is_visible()
                     assert page.locator(".host-metrics").first.evaluate("el => el.scrollWidth <= el.clientWidth")
                     page.screenshot(path=str(screenshots / f"cluster-{width}.png"), full_page=True)
+                page.evaluate("""async()=>{
+                    const base=structuredClone(servers[0]);
+                    window.servers=Array.from({length:10},(_,i)=>({...structuredClone(base),
+                      id:'align-'+i,name:['VMSStorm','VMSMist','VMSRain','Mondo-2','VMSCloud-Incus','VMSFog-Incus','Incus-Member','VMSDroplet','Demo-1','Mondo (Dell XPS 8930)'][i],
+                      online:i!==1,clustered:i>=4&&i<=6,cluster_member:'member-'+i,
+                      host_metrics:{...structuredClone(base.host_metrics),online:i!==1,
+                        filesystems:Array.from({length:i%7+1},(_,n)=>({mount:n?'/mnt/storage-with-a-long-name-'+n:'/',filesystem:'ext4',used:123456789000,total:987654321000}))}}));
+                    await document.querySelector('scottibyte-incus-panel').refresh();
+                }""")
+                page.set_viewport_size({"width":1680,"height":1100})
+                assert page.locator(".server-card").count() == 10
+                for selector in (".card-top", ".card-identity h3", ".server-address", ".card-version", ".host-metrics dl>div", ".host-disks", ".card-counts", ".card-bottom"):
+                    positions = page.locator(".server-card").evaluate_all("(cards,selector)=>cards.slice(0,6).map(c=>c.querySelector(selector).getBoundingClientRect().top)", selector)
+                    assert max(positions)-min(positions)<1, (selector,positions)
+                heights=page.locator(".server-card").evaluate_all("cards=>cards.map(c=>c.getBoundingClientRect().height)")
+                assert max(heights)-min(heights)<1, heights
+                page.screenshot(path=str(screenshots / "card-alignment-desktop.png"),full_page=True)
+                for width in (360,390,480):
+                    page.set_viewport_size({"width":width,"height":844})
+                    assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth")
+                    assert page.locator(".host-metrics").first.evaluate("el=>el.scrollWidth<=el.clientWidth")
+                    page.locator(".server-card").first.screenshot(path=str(screenshots / f"card-alignment-{width}.png"))
                 assert not errors, errors
                 browser.close()
                 print(

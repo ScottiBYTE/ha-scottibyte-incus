@@ -5,7 +5,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.2.0-beta.1 — whole-server metrics testing.** Live acceptance of the new host monitoring is pending. v1.1.3 remains the stable release; enable beta releases in HACS to select this candidate.
+**Version 1.2.0-beta.2 — whole-server metrics testing.** Live acceptance of the new host monitoring is pending. v1.1.3 remains the stable release; enable beta releases in HACS to select this candidate.
 
 ## Features
 
@@ -43,7 +43,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). For testing, enable beta releases and select **v1.2.0-beta.1** in HACS; **v1.1.3** remains stable. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
+After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). For testing, enable beta releases and select **v1.2.0-beta.2** in HACS; **v1.1.3** remains stable. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
 
