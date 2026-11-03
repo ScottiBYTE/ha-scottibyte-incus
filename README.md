@@ -5,7 +5,7 @@
 
 A HACS-installable custom integration that brings multiple Incus servers into one Home Assistant sidebar dashboard.
 
-**Version 1.2.0 — whole-server monitoring.** Stable release with host CPU, memory and filesystem usage, a saved refresh interval, and compact desktop and mobile server cards.
+**Version 1.2.1 — setup responsiveness and HACS review fixes.** Stable release with non-blocking setup file and key processing, alongside whole-server monitoring and compact desktop and mobile server cards.
 
 ## Features
 
@@ -34,8 +34,8 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 
 ## Install through HACS
 
-1. In HACS, open **Custom repositories**, add `https://github.com/ScottiBYTE/ha-scottibyte-incus`, and select **Integration**.
-2. Find **ScottiBYTE Incus**, download it, then restart Home Assistant.
+1. In HACS, open **Integrations**, select **Explore & download repositories**, and search for **ScottiBYTE Incus**.
+2. Download the integration, then restart Home Assistant.
 3. Open **Settings → Devices & services → Add integration → ScottiBYTE Incus**.
 4. Choose **Automatic setup using SSH**.
 5. Enter the server address, SSH credentials, and API port. Leave the optional display name blank to use the detected hostname.
@@ -43,9 +43,7 @@ This is an integration, not a Home Assistant app/add-on or a separate web servic
 7. Open **Incus** in the HA sidebar.
 8. Use the dashboard's **Add server** shortcut for another independent server. Home Assistant's native integration page may call this **Add hub**.
 
-After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.2.0** stable release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
-
-Default-catalog inclusion requires a separate HACS submission after the repository and integration meet its requirements. Installation as a custom repository does not imply default-catalog acceptance.
+If the integration does not appear in HACS search yet, add `https://github.com/ScottiBYTE/ha-scottibyte-incus` under **Custom repositories** as an **Integration** and install it there. After an update, restart Home Assistant and hard-refresh the browser (**Ctrl+Shift+R**). Select the numbered **v1.2.1** stable release in HACS. A hexadecimal commit identifier means the development branch is selected. Restart HA after installation; refresh the browser or reset the Companion frontend cache if an older interface remains visible. Tracking `main` is reserved for development testing.
 
 ### Manual installation for initial testing
 
@@ -180,4 +178,4 @@ Uncheck Enable in the host-metrics setup form to disable monitoring. Disabling i
 
 Before downgrading to v1.1.3, disable host monitoring on each entry while the beta is installed so its SSH keys are removed.
 
-This beta still requires live acceptance on real hosts. v1.1.3 remains the stable release while testing is in progress.
+Host metrics were introduced in v1.2.0 and are now part of the stable integration. HACS catalog inclusion is handled through the HACS submission process; users can find the integration through HACS search once catalog indexing completes.

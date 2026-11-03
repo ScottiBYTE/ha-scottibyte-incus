@@ -1,7 +1,6 @@
 """UI setup, with a separate SSH identity confirmation before credential use."""
 
 import shutil
-import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,6 +20,7 @@ from .bootstrap import (
     enroll_ssh,
     enroll_token,
     generate_certificate,
+    make_temporary_ssl_context,
     validate_host,
     write_credentials,
 )
@@ -251,20 +251,17 @@ class IncusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _discard_enrollment(self, settings, pem, cert, key):
         # A duplicate reached through a DNS alias may already have enrolled.
         # Retire only the newly generated identity, never another entry's trust.
-        with tempfile.TemporaryDirectory(prefix="ha-incus-duplicate-") as tmp:
-            directory = Path(tmp)
-            await self.hass.async_add_executor_job(write_credentials, directory / "client.crt", directory / "client.key", cert, key)
-            context = await self.hass.async_add_executor_job(make_ssl_context, pem, directory / "client.crt", directory / "client.key")
-            client = IncusClient(api_url(settings["host"], settings["api_port"]), context)
-            fingerprint = certificate_fingerprint(cert)
-            try:
-                await client.request("DELETE", f"/1.0/certificates/{fingerprint}", timeout=10)
-            except Exception:
-                persistent_notification.async_create(self.hass,
-                    f"Duplicate setup was rejected, but the new trust identity may remain. Remove only certificate {fingerprint} on {settings['host']}.",
-                    title="Incus duplicate trust cleanup")
-            finally:
-                await client.close()
+        context = await self.hass.async_add_executor_job(make_temporary_ssl_context, pem, cert, key)
+        client = IncusClient(api_url(settings["host"], settings["api_port"]), context)
+        fingerprint = certificate_fingerprint(cert)
+        try:
+            await client.request("DELETE", f"/1.0/certificates/{fingerprint}", timeout=10)
+        except Exception:
+            persistent_notification.async_create(self.hass,
+                f"Duplicate setup was rejected, but the new trust identity may remain. Remove only certificate {fingerprint} on {settings['host']}.",
+                title="Incus duplicate trust cleanup")
+        finally:
+            await client.close()
 
     def _known_fingerprints(self):
         return {e.data.get("fingerprint") for e in self._async_current_entries() if e is not getattr(self, "_editing_entry", None)}

@@ -98,28 +98,33 @@ async def enroll_token(host, port, token, cert, key, known_fingerprints=()):
     pem = await fetch_server_certificate(host, port, fingerprint)
     if certificate_fingerprint(pem) in known_fingerprints:
         raise EnrollmentError("This Incus server or cluster is already configured")
+    context = await asyncio.to_thread(make_temporary_ssl_context, pem, cert, key)
+    client = IncusClient(api_url(host, port), context)
+    try:
+        await client.request(
+            "POST",
+            "/1.0/certificates",
+            payload={
+                "type": "client",
+                "name": "Home Assistant ScottiBYTE Incus",
+                "certificate": base64.b64encode(ssl.PEM_cert_to_DER_cert(cert)).decode(),
+                "trust_token": token,
+            },
+        )
+        info = await client.metadata("/1.0")
+        if info.get("auth") != "trusted":
+            raise EnrollmentError("The server did not trust the enrolled certificate")
+        return pem, info
+    finally:
+        await client.close()
+
+
+def make_temporary_ssl_context(pem, cert, key):
+    """Build an SSL context with temporary credentials, keeping all file I/O off-loop."""
     with tempfile.TemporaryDirectory(prefix="ha-incus-") as directory:
         cert_path, key_path = Path(directory) / "client.crt", Path(directory) / "client.key"
-        await asyncio.to_thread(write_credentials, cert_path, key_path, cert, key)
-        context = await asyncio.to_thread(make_ssl_context, pem, cert_path, key_path)
-        client = IncusClient(api_url(host, port), context)
-        try:
-            await client.request(
-                "POST",
-                "/1.0/certificates",
-                payload={
-                    "type": "client",
-                    "name": "Home Assistant ScottiBYTE Incus",
-                    "certificate": base64.b64encode(ssl.PEM_cert_to_DER_cert(cert)).decode(),
-                    "trust_token": token,
-                },
-            )
-            info = await client.metadata("/1.0")
-            if info.get("auth") != "trusted":
-                raise EnrollmentError("The server did not trust the enrolled certificate")
-            return pem, info
-        finally:
-            await client.close()
+        write_credentials(cert_path, key_path, cert, key)
+        return make_ssl_context(pem, cert_path, key_path)
 
 
 def write_credentials(cert_path, key_path, cert, key):
@@ -144,9 +149,9 @@ async def enroll_ssh(settings, host_key, cert, key):
         "login_timeout": 20,
     }
     if settings.get("ssh_key"):
-        kwargs["client_keys"] = [
-            asyncssh.import_private_key(settings["ssh_key"], settings.get("key_passphrase") or None)
-        ]
+        kwargs["client_keys"] = [await asyncio.to_thread(
+            asyncssh.import_private_key, settings["ssh_key"], settings.get("key_passphrase") or None
+        )]
     async with asyncssh.connect(**kwargs) as conn:
         sudo = False
         result = await conn.run("incus --force-local query /1.0", check=False, timeout=15)

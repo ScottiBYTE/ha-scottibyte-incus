@@ -1,5 +1,6 @@
 """Whole Linux host measurements over a metrics-only, pinned SSH connection."""
 
+import asyncio
 import base64
 import json
 import shlex
@@ -90,7 +91,9 @@ async def install(hass, settings, host_key):
     marker = "ha-scottibyte-host-" + ident.removeprefix("metrics-")
     key = asyncssh.generate_private_key('ssh-ed25519')
     line = authorized_line(key.export_public_key().decode(), marker)
-    keys = [asyncssh.import_private_key(settings['ssh_key'], settings.get('key_passphrase') or None)] if settings.get('ssh_key') else []
+    keys = [await asyncio.to_thread(
+        asyncssh.import_private_key, settings['ssh_key'], settings.get('key_passphrase') or None
+    )] if settings.get('ssh_key') else []
     config = {'credential_id': ident, 'host': settings['host'], 'port': settings['ssh_port'],
               'username': settings['username'], 'marker': marker}
     directory = Path(hass.config.path('.storage', DOMAIN, ident))
